@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  cyberscope-web:
+    build: .
+    container_name: cyberscope-web
+    # USAR HOST NETWORK PARA ACCESO DIRECTO A LA RED LOCAL
+    network_mode: "host"
+    volumes:
+      - ./reports:/app/reports
+      - ./uploads:/app/uploads
+      - ./logs:/app/logs
+      - /home/$USER/.ssh:/app/.ssh:ro  # Montar claves SSH del host
+    environment:
+      - FLASK_ENV=production
+      - PYTHONPATH=/app
+      - SSH_AUTH_SOCK=${SSH_AUTH_SOCK}  # Para ssh-agent
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    # Privilegios adicionales para herramientas de red
+    privileged: true
+    cap_add:
+      - NET_ADMIN
+      - SYS_ADMIN

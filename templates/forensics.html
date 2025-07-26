@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+
+{% block title %}Análisis Forense - CyberScope{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-8 mx-auto">
+        <div class="card">
+            <div class="card-header bg-success text-white">
+                <h4 class="mb-0">
+                    <i class="fas fa-search"></i> Análisis Forense de Archivos
+                </h4>
+            </div>
+            <div class="card-body">
+                <form id="forensicsForm" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label for="file" class="form-label">
+                            <strong>Seleccionar Archivo</strong>
+                        </label>
+                        <input type="file" class="form-control" id="file" name="file" required>
+                        <div class="form-text">
+                            Sube un archivo para análisis forense (máximo 16MB)
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label"><strong>Tipo de Análisis</strong></label>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" id="hash" name="analysis_type" value="hash" checked>
+                                    <label class="form-check-label" for="hash">
+                                        <i class="fas fa-fingerprint"></i> Hash del Archivo
+                                    </label>
+                                    <small class="d-block text-muted">MD5, SHA1, SHA256</small>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" id="exif" name="analysis_type" value="exif">
+                                    <label class="form-check-label" for="exif">
+                                        <i class="fas fa-image"></i> Metadatos EXIF
+                                    </label>
+                                    <small class="d-block text-muted">Para imágenes</small>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" id="pdf" name="analysis_type" value="pdf">
+                                    <label class="form-check-label" for="pdf">
+                                        <i class="fas fa-file-pdf"></i> Metadatos PDF
+                                    </label>
+                                    <small class="d-block text-muted">Para archivos PDF</small>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" id="ioc" name="analysis_type" value="ioc">
+                                    <label class="form-check-label" for="ioc">
+                                        <i class="fas fa-search-plus"></i> Extracción de IoCs
+                                    </label>
+                                    <small class="d-block text-muted">IPs, URLs, emails, hashes</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-success btn-lg">
+                            <i class="fas fa-play"></i> Iniciar Análisis Forense
+                        </button>
+                    </div>
+                </form>
+
+                <!-- Loading -->
+                <div id="loadingContainer" style="display: none;" class="mt-4">
+                    <div class="text-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Analizando...</span>
+                        </div>
+                        <p class="mt-2">Analizando archivo...</p>
+                    </div>
+                </div>
+
+                <!-- Results Section -->
+                <div id="forensicsResults" style="display: none;" class="mt-4">
+                    <div class="card">
+                        <div class="card-header bg-info text-white">
+                            <h5 class="mb-0">
+                                <i class="fas fa-check-circle"></i> Análisis Forense Completado
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <p><strong>Hallazgos Encontrados:</strong> <span id="forensicsFindingsCount">0</span></p>
+                                </div>
+                                <div class="col-md-6 text-end">
+                                    <div class="btn-group" role="group">
+                                        <button id="downloadForensicsJson" class="btn btn-outline-primary">
+                                            <i class="fas fa-download"></i> Descargar JSON
+                                        </button>
+                                        <button id="downloadForensicsPdf" class="btn btn-outline-danger">
+                                            <i class="fas fa-file-pdf"></i> Descargar PDF
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="findings-container">
+                                <h6>Resultados del Análisis:</h6>
+                                <div id="forensicsFindingsList" class="border rounded p-3 bg-light">
+                                    <!-- Los hallazgos se cargarán aquí -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentForensicsReportId = null;
+
+document.getElementById('forensicsForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const fileInput = document.getElementById('file');
+    const analysisType = document.querySelector('input[name="analysis_type"]:checked').value;
+    
+    if (!fileInput.files[0]) {
+        alert('Por favor selecciona un archivo');
+        return;
+    }
+    
+    startForensicsAnalysis(fileInput.files[0], analysisType);
+});
+
+function startForensicsAnalysis(file, analysisType) {
+    // Mostrar loading
+    document.getElementById('loadingContainer').style.display = 'block';
+    document.getElementById('forensicsResults').style.display = 'none';
+    
+    // Deshabilitar formulario
+    document.getElementById('forensicsForm').style.display = 'none';
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('analysis_type', analysisType);
+    
+    fetch('/upload_file', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        document.getElementById('loadingContainer').style.display = 'none';
+        
+        if (data.error) {
+            alert('Error: ' + data.error);
+            resetForensicsForm();
+            return;
+        }
+        
+        currentForensicsReportId = data.report_id;
+        showForensicsResults(data);
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error en análisis forense');
+        document.getElementById('loadingContainer').style.display = 'none';
+        resetForensicsForm();
+    });
+}
+
+function showForensicsResults(data) {
+    document.getElementById('forensicsResults').style.display = 'block';
+    
+    document.getElementById('forensicsFindingsCount').textContent = data.findings_count || 0;
+    
+    // Mostrar hallazgos
+    const findingsList = document.getElementById('forensicsFindingsList');
+    if (data.findings && data.findings.length > 0) {
+        findingsList.innerHTML = data.findings.map(finding => 
+            `<div class="finding-item">${escapeHtml(finding)}</div>`
+        ).join('');
+    } else {
+        findingsList.innerHTML = '<div class="text-muted">No se encontraron hallazgos</div>';
+    }
+    
+    // Configurar botones de descarga
+    document.getElementById('downloadForensicsJson').onclick = () => downloadForensicsReport('json');
+    document.getElementById('downloadForensicsPdf').onclick = () => downloadForensicsReport('pdf');
+}
+
+function downloadForensicsReport(type) {
+    if (!currentForensicsReportId) return;
+    
+    window.open(`/download/${currentForensicsReportId}/${type}`, '_blank');
+}
+
+function resetForensicsForm() {
+    document.getElementById('forensicsForm').style.display = 'block';
+    document.getElementById('loadingContainer').style.display = 'none';
+    document.getElementById('forensicsResults').style.display = 'none';
+    
+    currentForensicsReportId = null;
+    
+    // Reset form
+    document.getElementById('forensicsForm').reset();
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Reset button functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const resetBtn = document.createElement('button');
+    resetBtn.type = 'button';
+    resetBtn.className = 'btn btn-secondary mt-2';
+    resetBtn.innerHTML = '<i class="fas fa-redo"></i> Nuevo Análisis';
+    resetBtn.onclick = resetForensicsForm;
+    resetBtn.style.display = 'none';
+    resetBtn.id = 'resetForensicsBtn';
+    
+    document.getElementById('forensicsResults').appendChild(resetBtn);
+});
+</script>
+{% endblock %}
