@@ -220,7 +220,16 @@ class RemoteForensicScanner:
                 capture_output=True,
                 text=True,
                 timeout=timeout,
-                input=password if password and not key_file and not self._check_sshpass_available() else None
+                use_input = password if password and not key_file and not self._check_sshpass_available() else None
+
+                result = subprocess.run(
+                    ssh_cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout,
+                    input=use_input
+                )
+
             )
             
             # Registrar evidencia
