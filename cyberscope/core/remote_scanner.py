@@ -74,12 +74,13 @@ class RemoteForensicScanner:
             logger.debug(f"Comando SSH de prueba: {' '.join(ssh_cmd[:5])}...")  # No mostrar credenciales
             
             # Ejecutar comando de prueba
+            use_input = password if password and not key_file and not self._check_sshpass_available() else None
             result = subprocess.run(
                 ssh_cmd,
                 capture_output=True,
                 text=True,
                 timeout=self.ssh_timeout,
-                input=password if password and not key_file else None
+                input=use_input
             )
             
             if result.returncode == 0 and "SSH_CONNECTION_TEST_OK" in result.stdout:
