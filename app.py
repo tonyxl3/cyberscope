@@ -409,12 +409,21 @@ def remote_scan():
         username = (data.get('username') or '').strip()
         key_file_raw = data.get('key_file')
         key_file = key_file_raw.strip() if key_file_raw else None
+        password_raw = data.get('password')
+        password = password_raw.strip() if password_raw else None
         port = int(data.get('port', 22))
         scan_type = data.get('scan_type', 'standard')
         
         # Validación más robusta de parámetros
         if not hostname or not username:
             return jsonify({'error': 'Hostname y username son requeridos'}), 400
+        
+        # Validar que se proporcione al menos un método de autenticación
+        if not key_file and not password:
+            return jsonify({'error': 'Debe proporcionar clave privada O contraseña SSH'}), 400
+        
+        if key_file and password:
+            return jsonify({'error': 'Use solo clave privada O contraseña, no ambas'}), 400
         
         if port < 1 or port > 65535:
             return jsonify({'error': 'Puerto debe estar entre 1 y 65535'}), 400
@@ -446,7 +455,7 @@ def remote_scan():
         FINDINGS.append(f"[REMOTE_INIT] Iniciando análisis {scan_type} de {hostname}:{port}")
         
         # Probar conexión SSH primero
-        if not scanner.test_ssh_connection(hostname, username, key_file, port):
+        if not scanner.test_ssh_connection(hostname, username, key_file, port, password):
             error_msg = f"No se pudo establecer conexión SSH con {hostname}:{port}"
             logger.error(error_msg)
             return jsonify({'error': error_msg}), 400
@@ -457,22 +466,22 @@ def remote_scan():
         
         try:
             if scan_type == 'quick':
-                evidence = scanner.quick_scan(hostname, username, key_file, port)
+                evidence = scanner.quick_scan(hostname, username, key_file, port, password)
                 vulnerabilities = {}
                 logger.info(f"Escaneo rápido completado para {hostname}")
                 
             elif scan_type == 'vulnerability':
                 evidence = {}
-                vulnerabilities = scanner.vulnerability_assessment(hostname, username, key_file, port)
+                vulnerabilities = scanner.vulnerability_assessment(hostname, username, key_file, port, password)
                 logger.info(f"Evaluación de vulnerabilidades completada para {hostname}")
                 
             elif scan_type == 'comprehensive':
-                evidence = scanner.comprehensive_system_analysis(hostname, username, key_file, port)
-                vulnerabilities = scanner.vulnerability_assessment(hostname, username, key_file, port)
+                evidence = scanner.comprehensive_system_analysis(hostname, username, key_file, port, password)
+                vulnerabilities = scanner.vulnerability_assessment(hostname, username, key_file, port, password)
                 logger.info(f"Análisis comprehensivo completado para {hostname}")
                 
             else:  # standard
-                evidence = scanner.comprehensive_system_analysis(hostname, username, key_file, port)
+                evidence = scanner.comprehensive_system_analysis(hostname, username, key_file, port, password)
                 vulnerabilities = {}
                 logger.info(f"Análisis estándar completado para {hostname}")
                 

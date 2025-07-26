@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y \
     netcat-traditional \
     openssh-client \
     sshpass \
+    expect \
     net-tools \
     iputils-ping \
     traceroute \

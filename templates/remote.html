@@ -57,8 +57,31 @@
                                 <input type="text" class="form-control" id="key_file" name="key_file" 
                                        placeholder="/path/to/private/key">
                                 <div class="form-text">
-                                    Dejar vacío para usar autenticación por contraseña
+                                    Ruta completa al archivo de clave privada SSH
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="password" class="form-label">
+                                    <strong>Contraseña SSH (Opcional)</strong>
+                                </label>
+                                <input type="password" class="form-control" id="password" name="password" 
+                                       placeholder="Contraseña SSH">
+                                <div class="form-text">
+                                    Solo si no usas clave privada
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="alert alert-info mt-4" role="alert">
+                                <small>
+                                    <i class="fas fa-info-circle"></i>
+                                    <strong>Autenticación:</strong> Usa clave privada O contraseña, no ambas.
+                                </small>
                             </div>
                         </div>
                     </div>
@@ -199,6 +222,7 @@ document.getElementById('remoteForm').addEventListener('submit', function(e) {
     const username = document.getElementById('username').value.trim();
     const port = document.getElementById('port').value;
     const keyFile = document.getElementById('key_file').value.trim();
+    const password = document.getElementById('password').value.trim();
     const scanType = document.querySelector('input[name="scan_type"]:checked').value;
     
     if (!hostname || !username) {
@@ -206,10 +230,21 @@ document.getElementById('remoteForm').addEventListener('submit', function(e) {
         return;
     }
     
-    startRemoteAnalysis(hostname, username, port, keyFile, scanType);
+    // Validar que se proporcione al menos un método de autenticación
+    if (!keyFile && !password) {
+        alert('Por favor proporciona una clave privada O una contraseña SSH');
+        return;
+    }
+    
+    if (keyFile && password) {
+        alert('Por favor usa solo clave privada O contraseña, no ambas');
+        return;
+    }
+    
+    startRemoteAnalysis(hostname, username, port, keyFile, password, scanType);
 });
 
-function startRemoteAnalysis(hostname, username, port, keyFile, scanType) {
+function startRemoteAnalysis(hostname, username, port, keyFile, password, scanType) {
     // Mostrar loading
     document.getElementById('loadingContainer').style.display = 'block';
     document.getElementById('resultsContainer').style.display = 'none';
@@ -229,6 +264,7 @@ function startRemoteAnalysis(hostname, username, port, keyFile, scanType) {
         username: username,
         port: parseInt(port),
         key_file: keyFile && keyFile.trim() ? keyFile.trim() : null,
+        password: password && password.trim() ? password.trim() : null,
         scan_type: scanType
     };
     
@@ -339,6 +375,7 @@ function resetRemoteForm() {
     // Reset form
     document.getElementById('remoteForm').reset();
     document.getElementById('port').value = '22';
+    document.getElementById('password').value = '';
     document.getElementById('comprehensive').checked = true;
 }
 
