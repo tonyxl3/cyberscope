@@ -35,7 +35,7 @@ class RemoteForensicScanner:
         self.start_time = datetime.now()
         
         # Configuración SSH con valores por defecto seguros
-        self.ssh_timeout = self.config.get('ssh_timeout', 30)
+        self.ssh_timeout = self.config.get('ssh_timeout', 50)
         self.max_concurrent = self.config.get('max_concurrent', 3)
         self.evidence_dir = self.config.get('evidence_dir', './forensic_evidence')
         
