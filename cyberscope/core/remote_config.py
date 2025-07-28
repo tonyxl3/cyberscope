@@ -50,8 +50,8 @@ class RemoteForensicConfig:
             config['ssh'] = {}
         
         ssh_defaults = {
-            'timeout': 30,
-            'ssh_timeout': 30,  # Alias para compatibilidad
+            'timeout': 50,
+            'ssh_timeout': 50,  # Alias para compatibilidad
             'max_retries': 3,
             'key_exchange_timeout': 10,
             'connection_pool_size': 5,
@@ -86,8 +86,8 @@ class RemoteForensicConfig:
         return {
             # Configuración SSH
             "ssh": {
-                "timeout": 30,
-                "ssh_timeout": 30,  # Alias para compatibilidad
+                "timeout": 50,
+                "ssh_timeout": 50,  # Alias para compatibilidad
                 "max_retries": 3,
                 "key_exchange_timeout": 10,
                 "connection_pool_size": 5,
@@ -114,7 +114,7 @@ class RemoteForensicConfig:
                 "deep_scan_enabled": True,
                 "vulnerability_scanning": True,
                 "log_analysis_depth": 1000,
-                "command_timeout": 30,
+                "command_timeout": 50,
                 "retry_failed_commands": True
             },
             
@@ -196,7 +196,7 @@ class RemoteForensicConfig:
             
             # Configuración de timeouts específicos
             "timeouts": {
-                "ssh_connection": 10,
+                "ssh_connection": 30,
                 "command_execution": 30,
                 "file_transfer": 60,
                 "vulnerability_scan": 120
@@ -227,8 +227,8 @@ class RemoteForensicConfig:
         
         # Asegurar que existen todas las claves necesarias
         required_keys = {
-            'timeout': 30,
-            'ssh_timeout': 30,
+            'timeout': 50,
+            'ssh_timeout': 50,
             'max_retries': 3,
             'default_port': 22
         }
