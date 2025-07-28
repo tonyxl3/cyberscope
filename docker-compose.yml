@@ -4,17 +4,17 @@ services:
   cyberscope-web:
     build: .
     container_name: cyberscope-web
+    network_mode: "host"
     ports:
-      - "5000:5000"  # Expone el puerto 5000 del contenedor al host
+      - "5000:5000"
     volumes:
       - ./reports:/app/reports
       - ./uploads:/app/uploads
       - ./logs:/app/logs
-      - /home/$USER/.ssh:/app/.ssh:ro
+      - ~/.ssh:/root/.ssh:ro
     environment:
       - FLASK_ENV=production
       - PYTHONPATH=/app
-      - SSH_AUTH_SOCK=${SSH_AUTH_SOCK}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
@@ -22,7 +22,3 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-    privileged: true
-    cap_add:
-      - NET_ADMIN
-      - SYS_ADMIN

@@ -455,9 +455,11 @@ def remote_scan():
         FINDINGS.append(f"[REMOTE_INIT] Iniciando análisis {scan_type} de {hostname}:{port}")
         
         # Probar conexión SSH primero
-        if not scanner.test_ssh_connection(hostname, username, key_file, port, password):
+        connection_test = scanner.test_ssh_connection(hostname, username, key_file, port, password)
+        if not connection_test:
             error_msg = f"No se pudo establecer conexión SSH con {hostname}:{port}"
             logger.error(error_msg)
+            FINDINGS.append(f"[SSH_CONNECTION_FAILED] {error_msg}")
             return jsonify({'error': error_msg}), 400
         
         # Ejecutar análisis según el tipo
