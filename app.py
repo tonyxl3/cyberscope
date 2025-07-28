@@ -623,10 +623,4 @@ def health():
     return jsonify({'status': 'healthy', 'timestamp': datetime.now().isoformat()})
 
 if __name__ == '__main__':
-    # Configuración para producción
-    host = os.environ.get('FLASK_HOST', '0.0.0.0')
-    port = int(os.environ.get('FLASK_PORT', 5000))
-    debug = os.environ.get('FLASK_ENV') == 'development'
-    
-    logger.info(f"Iniciando CyberScope en {host}:{port}")
-    app.run(host=host, port=port, debug=debug, threaded=True)
+    app.run(host='0.0.0.0', port=5000, debug=True)
