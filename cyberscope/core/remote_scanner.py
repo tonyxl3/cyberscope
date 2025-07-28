@@ -214,22 +214,15 @@ class RemoteForensicScanner:
             
             logger.debug(f"Ejecutando comando remoto: {command[:50]}...")
             
+            use_input = password if (password and not key_file and not self._check_sshpass_available()) else None
+            
             # Ejecutar comando
             result = subprocess.run(
                 ssh_cmd,
                 capture_output=True,
                 text=True,
                 timeout=timeout,
-                use_input = password if password and not key_file and not self._check_sshpass_available() else None
-
-                result = subprocess.run(
-                    ssh_cmd,
-                    capture_output=True,
-                    text=True,
-                    timeout=timeout,
-                    input=use_input
-                )
-
+                input=use_input
             )
             
             # Registrar evidencia
