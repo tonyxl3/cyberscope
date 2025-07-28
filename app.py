@@ -442,7 +442,7 @@ def remote_scan():
             logger.error(f"Error cargando configuración: {e}")
             # Usar configuración por defecto si falla
             config = {
-                'ssh_timeout': 30,
+                'ssh_timeout': 50,
                 'max_concurrent': 3,
                 'evidence_dir': './forensic_evidence'
             }
