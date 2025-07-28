@@ -4,9 +4,9 @@ services:
   cyberscope-web:
     build: .
     container_name: cyberscope-web
-    network_mode: "host"
     ports:
       - "5000:5000"
+      - "80:5000"
     volumes:
       - ./reports:/app/reports
       - ./uploads:/app/uploads
@@ -15,6 +15,8 @@ services:
     environment:
       - FLASK_ENV=production
       - PYTHONPATH=/app
+      - FLASK_HOST=0.0.0.0
+      - FLASK_PORT=5000
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
