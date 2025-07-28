@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Sistema de Análisis Forense Remoto SSH - CyberScope v2.0
+Sistema de Análisis Forense Remoto SSH - CyberScope v2.0 - CORREGIDO
 Análisis forense sin rastros en servidores remotos
 """
 
@@ -69,50 +69,38 @@ class RemoteForensicScanner:
             
             # Construir comando SSH de prueba
             ssh_cmd = self._build_ssh_command(hostname, username, key_file, port, password)
-            ssh_cmd.extend(['echo', '"SSH_CONNECTION_TEST_OK"'])
+            ssh_cmd.append('echo "SSH_TEST_OK"')
             
-            logger.debug(f"Comando SSH de prueba: {' '.join(ssh_cmd[:5])}...")  # No mostrar credenciales
+            logger.debug(f"Ejecutando test SSH...")
             
             # Ejecutar comando de prueba
-            use_input = password if password and not key_file and not self._check_sshpass_available() else None
-            result = subprocess.run(
-                ssh_cmd,
-                capture_output=True,
-                text=True,
-                timeout=self.ssh_timeout,
-                input=use_input
+            stdout, stderr, return_code = self._execute_ssh_command(
+                ssh_cmd, password, timeout=self.ssh_timeout
             )
             
-            if result.returncode == 0 and "SSH_CONNECTION_TEST_OK" in result.stdout:
-                logger.info(f"Conexión SSH exitosa a {hostname}:{port}")
+            if return_code == 0 and "SSH_TEST_OK" in stdout:
+                logger.info(f"✅ Conexión SSH exitosa a {hostname}:{port}")
                 FINDINGS.append(f"[SSH_TEST] Conexión exitosa a {hostname}:{port}")
                 return True
             else:
-                logger.error(f"Fallo en prueba SSH: {result.stderr}")
-                FINDINGS.append(f"[SSH_ERROR] Fallo de conexión: {result.stderr}")
+                logger.error(f"❌ Fallo en prueba SSH a {hostname}:{port}")
+                logger.error(f"Error: {stderr}")
+                FINDINGS.append(f"[SSH_ERROR] Fallo de conexión: {stderr}")
                 return False
                 
         except subprocess.TimeoutExpired:
-            logger.error(f"Timeout en conexión SSH a {hostname}:{port}")
+            logger.error(f"⏰ Timeout en conexión SSH a {hostname}:{port}")
             FINDINGS.append(f"[SSH_TIMEOUT] Timeout conectando a {hostname}:{port}")
             return False
         except Exception as e:
-            logger.error(f"Error en prueba SSH: {e}")
+            logger.error(f"💥 Error en prueba SSH: {e}")
             FINDINGS.append(f"[SSH_ERROR] Error de conexión: {str(e)}")
             return False
     
     def _test_network_connectivity(self, hostname: str, port: int) -> bool:
         """Prueba conectividad de red básica"""
         try:
-            # Test de ping
-            ping_result = subprocess.run(
-                ['ping', '-c', '1', '-W', '5', hostname],
-                capture_output=True,
-                timeout=10
-            )
-            
-            if ping_result.returncode != 0:
-                logger.warning(f"Ping falló a {hostname}, pero continuando...")
+            logger.debug(f"🌐 Probando conectividad de red a {hostname}:{port}")
             
             # Test de conectividad TCP
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -121,15 +109,15 @@ class RemoteForensicScanner:
             sock.close()
             
             if result == 0:
-                logger.info(f"Puerto {port} accesible en {hostname}")
+                logger.info(f"✅ Puerto {port} accesible en {hostname}")
                 return True
             else:
-                logger.error(f"Puerto {port} no accesible en {hostname}")
+                logger.error(f"❌ Puerto {port} no accesible en {hostname}")
                 FINDINGS.append(f"[NETWORK_ERROR] Puerto {port} no accesible en {hostname}")
                 return False
                 
         except Exception as e:
-            logger.error(f"Error en test de conectividad: {e}")
+            logger.error(f"💥 Error en test de conectividad: {e}")
             FINDINGS.append(f"[NETWORK_ERROR] Error de conectividad: {str(e)}")
             return False
     
@@ -148,46 +136,152 @@ class RemoteForensicScanner:
         Returns:
             List[str]: Comando SSH como lista
         """
+        # Determinar método de autenticación
+        auth_method = self._determine_auth_method(key_file, password)
+        logger.info(f"🔐 Método de autenticación: {auth_method}")
+        
+        if auth_method == "key":
+            return self._build_key_auth_command(hostname, username, key_file, port)
+        elif auth_method == "password":
+            return self._build_password_auth_command(hostname, username, password, port)
+        else:
+            raise ValueError("No se pudo determinar método de autenticación válido")
+    
+    def _determine_auth_method(self, key_file: str = None, password: str = None) -> str:
+        """Determina el método de autenticación a usar"""
+        if key_file and key_file.strip():
+            if os.path.exists(key_file.strip()):
+                return "key"
+            else:
+                logger.warning(f"⚠️ Archivo de clave no encontrado: {key_file}")
+                if password and password.strip():
+                    logger.info("🔄 Cambiando a autenticación por contraseña")
+                    return "password"
+                else:
+                    raise FileNotFoundError(f"Archivo de clave no encontrado: {key_file}")
+        elif password and password.strip():
+            return "password"
+        else:
+            raise ValueError("Debe proporcionar clave privada O contraseña")
+    
+    def _build_key_auth_command(self, hostname: str, username: str, key_file: str, port: int) -> List[str]:
+        """Construir comando SSH para autenticación por clave"""
+        logger.debug(f"🔑 Construyendo comando SSH con clave privada: {key_file}")
+        
+        # Verificar permisos del archivo de clave
+        self._check_key_permissions(key_file)
+        
         ssh_cmd = [
             'ssh',
-            '-o', 'ConnectTimeout=30',
+            '-o', f'ConnectTimeout={self.ssh_timeout}',
             '-o', 'ServerAliveInterval=60',
             '-o', 'ServerAliveCountMax=3',
             '-o', 'StrictHostKeyChecking=no',
             '-o', 'UserKnownHostsFile=/dev/null',
             '-o', 'LogLevel=ERROR',
-            '-p', str(port)
+            '-o', 'BatchMode=yes',  # No solicitar contraseña
+            '-o', 'PasswordAuthentication=no',  # Forzar uso de clave
+            '-i', key_file.strip(),
+            '-p', str(port),
+            f"{username}@{hostname}"
         ]
         
-        # Configurar autenticación
-        if key_file and os.path.exists(key_file):
-            ssh_cmd.extend(['-i', key_file])
-            ssh_cmd.extend(['-o', 'BatchMode=yes'])  # No solicitar contraseña si hay clave
-            logger.debug(f"Usando autenticación por clave: {key_file}")
-        elif password:
-            # Para contraseña, usar sshpass si está disponible
-            if self._check_sshpass_available():
-                ssh_cmd = ['sshpass', '-p', password] + ssh_cmd
-                ssh_cmd.extend(['-o', 'BatchMode=yes'])
-                logger.debug("Usando autenticación por contraseña con sshpass")
-            else:
-                ssh_cmd.extend(['-o', 'BatchMode=no'])  # Permitir entrada interactiva
-                logger.debug("Usando autenticación por contraseña interactiva")
-        else:
-            ssh_cmd.extend(['-o', 'BatchMode=no'])  # Permitir entrada interactiva
+        return ssh_cmd
+    
+    def _build_password_auth_command(self, hostname: str, username: str, password: str, port: int) -> List[str]:
+        """Construir comando SSH para autenticación por contraseña"""
+        logger.debug("🔒 Construyendo comando SSH con contraseña")
         
-        # Agregar usuario y host
-        ssh_cmd.append(f"{username}@{hostname}")
+        # Verificar que sshpass esté disponible
+        if not self._check_sshpass_available():
+            raise RuntimeError("sshpass no está disponible y es requerido para autenticación por contraseña")
+        
+        ssh_cmd = [
+            'sshpass', '-p', password,
+            'ssh',
+            '-o', f'ConnectTimeout={self.ssh_timeout}',
+            '-o', 'ServerAliveInterval=60',
+            '-o', 'ServerAliveCountMax=3',
+            '-o', 'StrictHostKeyChecking=no',
+            '-o', 'UserKnownHostsFile=/dev/null',
+            '-o', 'LogLevel=ERROR',
+            '-o', 'BatchMode=yes',
+            '-o', 'PasswordAuthentication=yes',
+            '-p', str(port),
+            f"{username}@{hostname}"
+        ]
         
         return ssh_cmd
+    
+    def _check_key_permissions(self, key_file: str):
+        """Verificar y corregir permisos del archivo de clave"""
+        try:
+            stat_info = os.stat(key_file)
+            mode = oct(stat_info.st_mode)[-3:]
+            
+            if mode != '600':
+                logger.warning(f"⚠️ Archivo de clave tiene permisos inseguros: {mode}")
+                try:
+                    os.chmod(key_file, 0o600)
+                    logger.info(f"✅ Permisos del archivo de clave corregidos a 600")
+                except OSError as e:
+                    logger.warning(f"⚠️ No se pudieron corregir permisos: {e}")
+            
+        except OSError as e:
+            logger.warning(f"⚠️ No se pudieron verificar permisos del archivo de clave: {e}")
     
     def _check_sshpass_available(self) -> bool:
         """Verifica si sshpass está disponible"""
         try:
-            result = subprocess.run(['which', 'sshpass'], capture_output=True)
-            return result.returncode == 0
-        except:
+            result = subprocess.run(['which', 'sshpass'], capture_output=True, timeout=10)
+            available = result.returncode == 0
+            if available:
+                logger.debug("✅ sshpass está disponible")
+            else:
+                logger.error("❌ sshpass NO está disponible")
+            return available
+        except Exception as e:
+            logger.error(f"💥 Error verificando sshpass: {e}")
             return False
+    
+    def _execute_ssh_command(self, ssh_cmd: List[str], password: str = None, timeout: int = 30) -> Tuple[str, str, int]:
+        """
+        Ejecuta un comando SSH y retorna el resultado
+        
+        Args:
+            ssh_cmd: Comando SSH como lista
+            password: Contraseña (solo para logging, ya está en el comando)
+            timeout: Timeout en segundos
+            
+        Returns:
+            Tuple[str, str, int]: (stdout, stderr, return_code)
+        """
+        try:
+            logger.debug(f"🚀 Ejecutando comando SSH (timeout: {timeout}s)")
+            
+            # Ejecutar comando
+            result = subprocess.run(
+                ssh_cmd,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                env=dict(os.environ, LC_ALL='C')  # Asegurar salida en inglés
+            )
+            
+            logger.debug(f"📊 SSH ejecutado - Return code: {result.returncode}")
+            if result.returncode != 0:
+                logger.debug(f"⚠️ SSH stderr: {result.stderr[:200]}...")
+            
+            return result.stdout, result.stderr, result.returncode
+            
+        except subprocess.TimeoutExpired as e:
+            error_msg = f"Timeout ejecutando comando SSH después de {timeout}s"
+            logger.error(f"⏰ {error_msg}")
+            return "", error_msg, -1
+        except Exception as e:
+            error_msg = f"Error ejecutando comando SSH: {str(e)}"
+            logger.error(f"💥 {error_msg}")
+            return "", error_msg, -1
     
     def _execute_remote_command(self, hostname: str, username: str, command: str,
                                key_file: str = None, port: int = 22, 
@@ -208,36 +302,28 @@ class RemoteForensicScanner:
             Tuple[str, str, int]: (stdout, stderr, return_code)
         """
         try:
-            # Construir comando SSH
+            # Construir comando SSH completo
             ssh_cmd = self._build_ssh_command(hostname, username, key_file, port, password)
             ssh_cmd.append(command)
             
-            logger.debug(f"Ejecutando comando remoto: {command[:50]}...")
-            
-            use_input = password if (password and not key_file and not self._check_sshpass_available()) else None
+            logger.debug(f"🔧 Ejecutando comando remoto: {command[:50]}...")
             
             # Ejecutar comando
-            result = subprocess.run(
-                ssh_cmd,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                input=use_input
-            )
+            stdout, stderr, return_code = self._execute_ssh_command(ssh_cmd, password, timeout)
             
             # Registrar evidencia
-            self._record_evidence(hostname, command, result.stdout, result.stderr, result.returncode)
+            self._record_evidence(hostname, command, stdout, stderr, return_code)
             
-            return result.stdout, result.stderr, result.returncode
+            if return_code == 0:
+                logger.debug(f"✅ Comando ejecutado exitosamente")
+            else:
+                logger.warning(f"⚠️ Comando falló con código: {return_code}")
             
-        except subprocess.TimeoutExpired:
-            error_msg = f"Timeout ejecutando comando: {command[:50]}"
-            logger.error(error_msg)
-            FINDINGS.append(f"[CMD_TIMEOUT] {error_msg}")
-            return "", error_msg, -1
+            return stdout, stderr, return_code
+            
         except Exception as e:
-            error_msg = f"Error ejecutando comando: {str(e)}"
-            logger.error(error_msg)
+            error_msg = f"Error ejecutando comando remoto: {str(e)}"
+            logger.error(f"💥 {error_msg}")
             FINDINGS.append(f"[CMD_ERROR] {error_msg}")
             return "", error_msg, -1
     
@@ -255,6 +341,7 @@ class RemoteForensicScanner:
         }
         
         self.evidence_chain.append(evidence_entry)
+        logger.debug(f"📝 Evidencia registrada para comando: {command[:30]}...")
     
     def quick_scan(self, hostname: str, username: str, key_file: str = None, 
                    port: int = 22, password: str = None) -> Dict:
@@ -271,7 +358,7 @@ class RemoteForensicScanner:
         Returns:
             Dict: Evidencia recopilada
         """
-        logger.info(f"Iniciando escaneo rápido de {hostname}")
+        logger.info(f"🚀 Iniciando escaneo rápido de {hostname}")
         FINDINGS.append(f"[QUICK_SCAN] Iniciando escaneo rápido de {hostname}")
         
         evidence = {}
@@ -287,10 +374,15 @@ class RemoteForensicScanner:
             "memory": "free -h"
         }
         
+        success_count = 0
+        total_commands = len(quick_commands)
+        
         for category, command in quick_commands.items():
             try:
+                logger.debug(f"📋 Ejecutando: {category}")
+                
                 stdout, stderr, return_code = self._execute_remote_command(
-                    hostname, username, command, key_file, port, password
+                    hostname, username, command, key_file, port, password, timeout=30
                 )
                 
                 if return_code == 0 and stdout.strip():
@@ -299,15 +391,20 @@ class RemoteForensicScanner:
                         "output": stdout.strip(),
                         "timestamp": datetime.now().isoformat()
                     }
+                    success_count += 1
+                    logger.debug(f"✅ {category}: {len(stdout)} bytes recopilados")
                     FINDINGS.append(f"[QUICK_EVIDENCE] {category}: {len(stdout)} bytes recopilados")
                 else:
-                    FINDINGS.append(f"[QUICK_ERROR] Error en {category}: {stderr}")
+                    logger.warning(f"⚠️ {category}: Sin datos o error - {stderr[:100]}")
+                    FINDINGS.append(f"[QUICK_WARNING] {category}: Sin datos válidos")
                     
             except Exception as e:
-                logger.error(f"Error en comando {category}: {e}")
+                logger.error(f"💥 Error en comando {category}: {e}")
                 FINDINGS.append(f"[QUICK_ERROR] Error en {category}: {str(e)}")
         
-        FINDINGS.append(f"[QUICK_COMPLETE] Escaneo rápido completado: {len(evidence)} categorías")
+        logger.info(f"✅ Escaneo rápido completado: {success_count}/{total_commands} comandos exitosos")
+        FINDINGS.append(f"[QUICK_COMPLETE] Escaneo rápido completado: {success_count}/{total_commands} comandos exitosos")
+        
         return evidence
     
     def comprehensive_system_analysis(self, hostname: str, username: str, 
@@ -326,7 +423,7 @@ class RemoteForensicScanner:
         Returns:
             Dict: Evidencia forense completa
         """
-        logger.info(f"Iniciando análisis forense completo de {hostname}")
+        logger.info(f"🔍 Iniciando análisis forense completo de {hostname}")
         FINDINGS.append(f"[FORENSIC_ANALYSIS] Iniciando análisis completo de {hostname}")
         
         evidence = {}
@@ -376,9 +473,16 @@ class RemoteForensicScanner:
             }
         }
         
+        total_categories = len(forensic_commands)
+        completed_categories = 0
+        
         for category, commands in forensic_commands.items():
             evidence[category] = {}
+            logger.info(f"📂 Analizando categoría: {category}")
             FINDINGS.append(f"[FORENSIC_CATEGORY] Analizando: {category}")
+            
+            success_count = 0
+            total_commands = len(commands)
             
             for subcategory, command in commands.items():
                 try:
@@ -393,15 +497,23 @@ class RemoteForensicScanner:
                             "timestamp": datetime.now().isoformat(),
                             "hash": hashlib.sha256(stdout.encode()).hexdigest()
                         }
+                        success_count += 1
+                        logger.debug(f"✅ {subcategory}: {len(stdout)} bytes")
                         FINDINGS.append(f"[FORENSIC_EVIDENCE] {subcategory}: {len(stdout)} bytes")
                     else:
+                        logger.debug(f"⚠️ {subcategory}: Sin datos válidos")
                         FINDINGS.append(f"[FORENSIC_WARNING] {subcategory}: Sin datos o error")
                         
                 except Exception as e:
-                    logger.error(f"Error en {subcategory}: {e}")
+                    logger.error(f"💥 Error en {subcategory}: {e}")
                     FINDINGS.append(f"[FORENSIC_ERROR] {subcategory}: {str(e)}")
+            
+            completed_categories += 1
+            logger.info(f"📊 Categoría {category} completada: {success_count}/{total_commands} comandos exitosos")
         
+        logger.info(f"🎯 Análisis forense completado: {completed_categories}/{total_categories} categorías procesadas")
         FINDINGS.append(f"[FORENSIC_COMPLETE] Análisis forense completado: {len(evidence)} categorías")
+        
         return evidence
     
     def vulnerability_assessment(self, hostname: str, username: str, 
@@ -420,7 +532,7 @@ class RemoteForensicScanner:
         Returns:
             Dict: Vulnerabilidades encontradas
         """
-        logger.info(f"Iniciando evaluación de vulnerabilidades en {hostname}")
+        logger.info(f"🛡️ Iniciando evaluación de vulnerabilidades en {hostname}")
         FINDINGS.append(f"[VULN_ASSESSMENT] Iniciando evaluación de vulnerabilidades")
         
         vulnerabilities = {}
@@ -459,12 +571,15 @@ class RemoteForensicScanner:
             }
         }
         
+        total_vulns_found = 0
+        
         for category, checks in vuln_checks.items():
             vulnerabilities[category] = {
                 "vulnerabilities_found": [],
                 "evidence": {}
             }
             
+            logger.info(f"🔍 Evaluando vulnerabilidades: {category}")
             FINDINGS.append(f"[VULN_CHECK] Evaluando: {category}")
             
             for check_name, command in checks.items():
@@ -483,17 +598,19 @@ class RemoteForensicScanner:
                         # Análisis básico de vulnerabilidades
                         vulns = self._analyze_vulnerability_output(check_name, stdout)
                         vulnerabilities[category]["vulnerabilities_found"].extend(vulns)
+                        total_vulns_found += len(vulns)
                         
                         if vulns:
                             for vuln in vulns:
+                                logger.warning(f"🚨 VULNERABILIDAD: {category} - {vuln}")
                                 FINDINGS.append(f"[VULNERABILITY] {category}: {vuln}")
                         
                 except Exception as e:
-                    logger.error(f"Error en check {check_name}: {e}")
+                    logger.error(f"💥 Error en check {check_name}: {e}")
                     FINDINGS.append(f"[VULN_ERROR] {check_name}: {str(e)}")
         
-        total_vulns = sum(len(v["vulnerabilities_found"]) for v in vulnerabilities.values())
-        FINDINGS.append(f"[VULN_COMPLETE] Evaluación completada: {total_vulns} vulnerabilidades encontradas")
+        logger.info(f"🛡️ Evaluación de vulnerabilidades completada: {total_vulns_found} vulnerabilidades encontradas")
+        FINDINGS.append(f"[VULN_COMPLETE] Evaluación completada: {total_vulns_found} vulnerabilidades encontradas")
         
         return vulnerabilities
     
@@ -558,12 +675,12 @@ class RemoteForensicScanner:
             with open(output_file, 'w', encoding='utf-8') as f:
                 json.dump(evidence_data, f, indent=2, ensure_ascii=False)
             
-            logger.info(f"Cadena de evidencia exportada: {output_file}")
+            logger.info(f"📄 Cadena de evidencia exportada: {output_file}")
             FINDINGS.append(f"[EVIDENCE_EXPORT] Cadena de evidencia exportada: {output_file}")
             
             return output_file
             
         except Exception as e:
-            logger.error(f"Error exportando cadena de evidencia: {e}")
+            logger.error(f"💥 Error exportando cadena de evidencia: {e}")
             FINDINGS.append(f"[EVIDENCE_ERROR] Error exportando evidencia: {str(e)}")
             return None
