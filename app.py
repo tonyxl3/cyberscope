@@ -417,12 +417,15 @@ def remote_scan():
         # Validación más robusta de parámetros
         if not hostname or not username:
             return jsonify({'error': 'Hostname y username son requeridos'}), 400
+
+        key_file = key_file.strip() if key_file else None
+        password = password.strip() if password else None
         
         # Validar que se proporcione al menos un método de autenticación
-        if not key_file and not password:
+        if (not key_file and not password):
             return jsonify({'error': 'Debe proporcionar clave privada O contraseña SSH'}), 400
         
-        if key_file and password:
+        if (key_file and password):
             return jsonify({'error': 'Use solo clave privada O contraseña, no ambas'}), 400
         
         if port < 1 or port > 65535:
