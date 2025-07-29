@@ -407,96 +407,84 @@ def remote_scan():
         data = request.get_json()
         hostname = (data.get('hostname') or '').strip()
         username = (data.get('username') or '').strip()
-        key_file_raw = data.get('key_file')
-        key_file = key_file_raw.strip() if key_file_raw else None
-        password_raw = data.get('password')
-        password = password_raw.strip() if password_raw else None
         port = int(data.get('port', 22))
         scan_type = data.get('scan_type', 'standard')
-        
-        # Validación más robusta de parámetros
+
+        # Validación más robusta de parámetros iniciales
         if not hostname or not username:
             return jsonify({'error': 'Hostname y username son requeridos'}), 400
 
-        key_file = key_file.strip() if key_file else None
-        password = password.strip() if password else None
-        
-        # Validar que se proporcione al menos un método de autenticación
-        if (not key_file and not password):
+        # Limpiar y validar campos de autenticación
+        key_file = data.get('key_file')
+        if isinstance(key_file, str):
+            key_file = key_file.strip()
+            if not key_file:
+                key_file = None
+
+        password = data.get('password')
+        if isinstance(password, str):
+            password = password.strip()
+            if not password:
+                password = None
+
+        # Validar método de autenticación
+        if not key_file and not password:
             return jsonify({'error': 'Debe proporcionar clave privada O contraseña SSH'}), 400
-        
-        if (key_file and password):
+        if key_file and password:
             return jsonify({'error': 'Use solo clave privada O contraseña, no ambas'}), 400
-        
+
         if port < 1 or port > 65535:
             return jsonify({'error': 'Puerto debe estar entre 1 y 65535'}), 400
-        
-        # Validar tipos de escaneo
+
         valid_scan_types = ['quick', 'standard', 'comprehensive', 'vulnerability']
         if scan_type not in valid_scan_types:
             return jsonify({'error': f'Tipo de escaneo debe ser uno de: {", ".join(valid_scan_types)}'}), 400
-        
+
         clear_findings()
-        
-        # Inicializar configuración corregida
+
+        # Inicializar configuración
         try:
             config = RemoteForensicConfig().config
         except Exception as e:
             logger.error(f"Error cargando configuración: {e}")
-            # Usar configuración por defecto si falla
             config = {
                 'ssh_timeout': 50,
                 'max_concurrent': 3,
                 'evidence_dir': './forensic_evidence'
             }
-        
-        # Inicializar scanner remoto con configuración validada
+
         scanner = RemoteForensicScanner(config)
-        
-        # Log del intento de conexión
+
         logger.info(f"Iniciando análisis remoto: {hostname}:{port} como {username} (tipo: {scan_type})")
         FINDINGS.append(f"[REMOTE_INIT] Iniciando análisis {scan_type} de {hostname}:{port}")
-        
-        # Probar conexión SSH primero
-        connection_test = scanner.test_ssh_connection(hostname, username, key_file, port, password)
-        if not connection_test:
+
+        if not scanner.test_ssh_connection(hostname, username, key_file, port, password):
             error_msg = f"No se pudo establecer conexión SSH con {hostname}:{port}"
             logger.error(error_msg)
             FINDINGS.append(f"[SSH_CONNECTION_FAILED] {error_msg}")
             return jsonify({'error': error_msg}), 400
-        
-        # Ejecutar análisis según el tipo
+
+        # Ejecutar análisis
         evidence = {}
         vulnerabilities = {}
-        
         try:
             if scan_type == 'quick':
                 evidence = scanner.quick_scan(hostname, username, key_file, port, password)
-                vulnerabilities = {}
-                logger.info(f"Escaneo rápido completado para {hostname}")
-                
             elif scan_type == 'vulnerability':
-                evidence = {}
                 vulnerabilities = scanner.vulnerability_assessment(hostname, username, key_file, port, password)
-                logger.info(f"Evaluación de vulnerabilidades completada para {hostname}")
-                
             elif scan_type == 'comprehensive':
                 evidence = scanner.comprehensive_system_analysis(hostname, username, key_file, port, password)
                 vulnerabilities = scanner.vulnerability_assessment(hostname, username, key_file, port, password)
-                logger.info(f"Análisis comprehensivo completado para {hostname}")
-                
             else:  # standard
                 evidence = scanner.comprehensive_system_analysis(hostname, username, key_file, port, password)
-                vulnerabilities = {}
-                logger.info(f"Análisis estándar completado para {hostname}")
-                
+
         except Exception as e:
             error_msg = f"Error durante el análisis remoto: {str(e)}"
             logger.error(error_msg)
             FINDINGS.append(f"[REMOTE_ERROR] {error_msg}")
             return jsonify({'error': error_msg}), 500
-        
-        # Análisis con IA
+
+        # Análisis ChatGPT / fallback
         chatgpt_analysis = None
         try:
             target_info = {
@@ -505,27 +493,23 @@ def remote_scan():
                 'timestamp': datetime.now().isoformat(),
                 'scan_type': 'remote_ssh'
             }
-            
+
             if OPENAI_API_KEY:
                 chatgpt_analyzer = ChatGPTAnalyzer(OPENAI_API_KEY)
                 chatgpt_analysis = chatgpt_analyzer.analyze_findings_with_chatgpt(FINDINGS, target_info)
             else:
                 fallback_analyzer = ChatGPTFallbackAnalyzer()
                 chatgpt_analysis = fallback_analyzer.analyze_findings_with_rules(FINDINGS, target_info)
-                
+
         except Exception as e:
             logger.error(f"Error en análisis ChatGPT remoto: {e}")
             FINDINGS.append(f"[CHATGPT_ERROR] Error en análisis IA: {str(e)}")
-        
+
         # Generar reporte
         report_id = generate_report_id()
-        
-        # Calcular estadísticas
         evidence_count = len(evidence)
-        vuln_count = 0
-        for vuln_data in vulnerabilities.values():
-            vuln_count += len(vuln_data.get('vulnerabilities_found', []))
-        
+        vuln_count = sum(len(v.get('vulnerabilities_found', [])) for v in vulnerabilities.values())
+
         complete_analysis_data = {
             'target_info': target_info,
             'findings': FINDINGS.copy(),
@@ -540,28 +524,22 @@ def remote_scan():
                 'target': f"{hostname}:{port}"
             }
         }
-        
-        # Exportar resultados
-        json_filename = f"remote_scan_{report_id}.json"
-        json_path = os.path.join(app.config['REPORTS_FOLDER'], json_filename)
-        
+
         try:
-            with open(json_path, 'w', encoding='utf-8') as f:
+            json_filename = f"remote_scan_{report_id}.json"
+            with open(os.path.join(app.config['REPORTS_FOLDER'], json_filename), 'w', encoding='utf-8') as f:
                 json.dump(complete_analysis_data, f, indent=2, ensure_ascii=False, default=str)
         except Exception as e:
             logger.error(f"Error guardando JSON: {e}")
-        
-        pdf_filename = f"remote_scan_{report_id}.pdf"
-        pdf_path = os.path.join(app.config['REPORTS_FOLDER'], pdf_filename)
-        
+
         try:
-            pdf_generator = CyberScopePDFGenerator()
-            pdf_generator.generate_comprehensive_report(complete_analysis_data, pdf_path)
+            pdf_filename = f"remote_scan_{report_id}.pdf"
+            pdf_path = os.path.join(app.config['REPORTS_FOLDER'], pdf_filename)
+            CyberScopePDFGenerator().generate_comprehensive_report(complete_analysis_data, pdf_path)
         except Exception as e:
             logger.error(f"Error generando PDF remoto: {e}")
             FINDINGS.append(f"[PDF_ERROR] Error generando PDF: {str(e)}")
-        
-        # Exportar cadena de evidencia forense
+
         try:
             evidence_chain_file = scanner.export_evidence_chain(
                 os.path.join(app.config['REPORTS_FOLDER'], f"evidence_chain_{report_id}.json")
@@ -569,8 +547,7 @@ def remote_scan():
         except Exception as e:
             logger.error(f"Error exportando cadena de evidencia: {e}")
             evidence_chain_file = None
-        
-        # Respuesta de éxito
+
         response_data = {
             'report_id': report_id,
             'findings_count': len(FINDINGS),
@@ -584,22 +561,20 @@ def remote_scan():
             'target': f"{hostname}:{port}",
             'scanner_session': scanner.session_id
         }
-        
+
         if evidence_chain_file:
             response_data['evidence_chain_file'] = os.path.basename(evidence_chain_file)
-        
+
         logger.info(f"Análisis remoto completado exitosamente: {hostname}:{port}")
         return jsonify(response_data)
-        
+
     except ValueError as e:
-        error_msg = f"Error de validación: {str(e)}"
-        logger.error(error_msg)
-        return jsonify({'error': error_msg}), 400
+        logger.error(f"Error de validación: {str(e)}")
+        return jsonify({'error': f'Error de validación: {str(e)}'}), 400
     except Exception as e:
-        error_msg = f"Error inesperado en análisis remoto: {str(e)}"
-        logger.error(error_msg)
-        FINDINGS.append(f"[REMOTE_CRITICAL_ERROR] {error_msg}")
-        return jsonify({'error': error_msg}), 500
+        logger.error(f"Error inesperado en análisis remoto: {str(e)}")
+        FINDINGS.append(f"[REMOTE_CRITICAL_ERROR] {str(e)}")
+        return jsonify({'error': f'Error inesperado: {str(e)}'}), 500
 
 
 @app.route('/reports')
