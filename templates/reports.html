@@ -18,10 +18,11 @@
                         <thead>
                             <tr>
                                 <th>ID del Reporte</th>
+                                <th>Tipo</th>
                                 <th>Fecha de Creación</th>
-                                <th>URLs Analizadas</th>
+                                <th>Objetivos</th>
                                 <th>Hallazgos</th>
-                                <th>Tipos de Análisis</th>
+                                <th>Detalles</th>
                                 <th>Acciones</th>
                             </tr>
                         </thead>
@@ -29,17 +30,36 @@
                             {% for report in reports %}
                             <tr>
                                 <td><code>{{ report.id }}</code></td>
+                                <td>
+                                    <span class="badge 
+                                        {% if report.analysis_type == 'Web' %}bg-primary
+                                        {% elif report.analysis_type == 'Forense' %}bg-success
+                                        {% elif report.analysis_type == 'Remoto SSH' %}bg-warning text-dark
+                                        {% else %}bg-secondary{% endif %}">
+                                        {{ report.analysis_type }}
+                                    </span>
+                                </td>
                                 <td>{{ report.started_at[:19] if report.started_at else 'N/A' }}</td>
                                 <td>
-                                    <span class="badge bg-primary">{{ report.urls_count }}</span>
+                                    <span class="badge bg-info">{{ report.urls_count }}</span>
                                 </td>
                                 <td>
                                     <span class="badge bg-success">{{ report.findings_count }}</span>
                                 </td>
                                 <td>
-                                    {% for analysis_type in report.analysis_types %}
-                                    <span class="badge bg-secondary me-1">{{ analysis_type }}</span>
-                                    {% endfor %}
+                                    <small>
+                                        {% if report.analysis_type == 'Remoto SSH' %}
+                                            Evidencias: {{ report.evidence_count }}<br>
+                                            Vulnerabilidades: {{ report.vulnerabilities_count }}
+                                        {% else %}
+                                            {% for analysis_type in report.analysis_types %}
+                                            <span class="badge bg-secondary me-1">{{ analysis_type }}</span>
+                                            {% endfor %}
+                                        {% endif %}
+                                        {% if report.has_chatgpt_analysis %}
+                                        <br><i class="fas fa-robot text-primary" title="Incluye análisis IA"></i>
+                                        {% endif %}
+                                    </small>
                                 </td>
                                 <td>
                                     <div class="btn-group btn-group-sm" role="group">

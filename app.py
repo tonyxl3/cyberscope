@@ -381,6 +381,20 @@ def upload_file():
             logger.error(f"Error generando PDF forense mejorado: {e}")
             generar_reporte_pdf(pdf_path)
         
+        # Registrar el reporte en analysis_status para permitir descarga
+        analysis_status[report_id] = {
+            'status': 'completed',
+            'progress': 100,
+            'json_file': json_filename,
+            'pdf_file': pdf_filename,
+            'findings_count': len(FINDINGS),
+            'findings': FINDINGS.copy(),
+            'chatgpt_analysis': chatgpt_analysis,
+            'started_at': datetime.now().isoformat(),
+            'analysis_types': [analysis_type],
+            'urls_count': 1
+        }
+        
         # Limpiar archivo subido
         os.remove(file_path)
         
@@ -548,6 +562,23 @@ def remote_scan():
             logger.error(f"Error exportando cadena de evidencia: {e}")
             evidence_chain_file = None
 
+        # Registrar el reporte en analysis_status para permitir descarga
+        analysis_status[report_id] = {
+            'status': 'completed',
+            'progress': 100,
+            'json_file': json_filename,
+            'pdf_file': pdf_filename,
+            'findings_count': len(FINDINGS),
+            'findings': FINDINGS.copy(),
+            'chatgpt_analysis': chatgpt_analysis,
+            'started_at': datetime.now().isoformat(),
+            'analysis_types': [scan_type],
+            'urls_count': 1,
+            'evidence_count': evidence_count,
+            'vulnerabilities_count': vuln_count,
+            'scanner_session': scanner.session_id
+        }
+        
         response_data = {
             'report_id': report_id,
             'findings_count': len(FINDINGS),
@@ -584,14 +615,28 @@ def reports():
     
     for report_id, status in analysis_status.items():
         if status['status'] == 'completed':
+            # Determinar el tipo de análisis basado en los archivos
+            json_file = status.get('json_file', '')
+            analysis_type = 'Web'
+            if json_file.startswith('forensics_'):
+                analysis_type = 'Forense'
+            elif json_file.startswith('remote_scan_'):
+                analysis_type = 'Remoto SSH'
+            
             reports.append({
                 'id': report_id,
                 'started_at': status.get('started_at'),
                 'urls_count': status.get('urls_count', 0),
                 'findings_count': status.get('findings_count', 0),
                 'analysis_types': status.get('analysis_types', []),
-                'has_chatgpt_analysis': bool(status.get('chatgpt_analysis'))
+                'has_chatgpt_analysis': bool(status.get('chatgpt_analysis')),
+                'analysis_type': analysis_type,
+                'evidence_count': status.get('evidence_count', 0),
+                'vulnerabilities_count': status.get('vulnerabilities_count', 0)
             })
+    
+    # Ordenar reportes por fecha (más recientes primero)
+    reports.sort(key=lambda x: x.get('started_at', ''), reverse=True)
     
     return render_template('reports.html', reports=reports)
 

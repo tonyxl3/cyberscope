@@ -188,9 +188,20 @@ function showForensicsResults(data) {
         findingsList.innerHTML = '<div class="text-muted">No se encontraron hallazgos</div>';
     }
     
+    // Mostrar análisis ChatGPT si está disponible
+    if (data.chatgpt_analysis) {
+        showForensicsChatGPTAnalysis(data.chatgpt_analysis);
+    }
+    
     // Configurar botones de descarga
     document.getElementById('downloadForensicsJson').onclick = () => downloadForensicsReport('json');
     document.getElementById('downloadForensicsPdf').onclick = () => downloadForensicsReport('pdf');
+    
+    // Mostrar botón de reset
+    const resetBtn = document.getElementById('resetForensicsBtn');
+    if (resetBtn) {
+        resetBtn.style.display = 'block';
+    }
 }
 
 function downloadForensicsReport(type) {
@@ -214,6 +225,36 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+// Mostrar análisis ChatGPT si está disponible
+function showForensicsChatGPTAnalysis(analysis) {
+    if (!analysis) return;
+    
+    const chatgptDiv = document.createElement('div');
+    chatgptDiv.id = 'forensicsChatgptAnalysis';
+    chatgptDiv.className = 'mt-3';
+    chatgptDiv.innerHTML = `
+        <h6><i class="fas fa-robot"></i> Análisis Inteligente:</h6>
+        <div class="card">
+            <div class="card-body">
+                ${analysis.risk_level ? `<div class="mb-2"><span class="badge" style="background-color: ${getRiskColor(analysis.risk_level)}; font-size: 1em;">Nivel de Riesgo: ${analysis.risk_level}</span></div>` : ''}
+                ${analysis.executive_summary ? `<div class="mb-3"><strong>Resumen:</strong> ${escapeHtml(analysis.executive_summary)}</div>` : ''}
+                ${analysis.recommendations && analysis.recommendations.length > 0 ? `<div><strong>Recomendaciones principales:</strong><ul>${analysis.recommendations.slice(0, 3).map(rec => `<li>${escapeHtml(rec)}</li>`).join('')}</ul></div>` : ''}
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('forensicsResults').querySelector('.card-body').appendChild(chatgptDiv);
+}
+
+function getRiskColor(riskLevel) {
+    const colors = {
+        'Alto': '#dc3545',
+        'Medio': '#ffc107',
+        'Bajo': '#28a745'
+    };
+    return colors[riskLevel] || '#6c757d';
 }
 
 // Reset button functionality
