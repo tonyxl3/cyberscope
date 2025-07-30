@@ -25,27 +25,22 @@ from .core.pentesting import (
     fuzzing_parametros_web,
     escaneo_completo_pentesting
 )
+from .core.remote_scanner import RemoteForensicScanner
+from .core.remote_config import RemoteForensicConfig
+from .core.remote_key_manager import ensure_ssh_key_and_push
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="CyberScope v2.0 - Herramienta de Análisis Forense y Web",
+        description="CyberScope v2.0 - Herramienta de Análisis Forense, Pentesting y OSINT",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Ejemplos de uso:
     python main.py --hash archivo.txt
-    python main.py --hash /ruta/directorio
     python main.py --buscar /ruta/directorio --pdf
     python main.py --exif imagen.jpg --json
-    python main.py --ioc log.txt --pdf --json
     python main.py --webscan https://miweb.com --pdf
-    python main.py --dirscan https://miweb.com wordlist.txt
-    python main.py --whois openai.com --ipinfo 8.8.8.8
-    python main.py --portscan 192.168.1.1
-    python main.py --vulnscan https://ejemplo.com
-    python main.py --sslcheck ejemplo.com
-    python main.py --paramfuzz https://ejemplo.com/search
-    python main.py --pentest https://ejemplo.com
+    python main.py --remotessh --host 192.168.1.100 --user root --password mi_pass --type quick --json --pdf
         """
     )
 
@@ -67,6 +62,16 @@ Ejemplos de uso:
     parser.add_argument("--sslcheck", help="Analizar certificado SSL de un host")
     parser.add_argument("--paramfuzz", help="Fuzzing de parámetros web en URL")
     parser.add_argument("--pentest", help="Escaneo completo de pentesting")
+
+    # Análisis remoto SSH
+    parser.add_argument("--remotessh", action="store_true", help="Ejecutar análisis remoto por SSH")
+    parser.add_argument("--host", help="Hostname o IP del servidor remoto")
+    parser.add_argument("--user", help="Usuario SSH")
+    parser.add_argument("--password", help="Contraseña SSH")
+    parser.add_argument("--key", help="Ruta de clave privada SSH")
+    parser.add_argument("--port", type=int, default=22, help="Puerto SSH (default: 22)")
+    parser.add_argument("--type", choices=['quick', 'standard', 'comprehensive', 'vulnerability'], default='standard',
+                        help="Tipo de escaneo remoto")
 
     # Salida
     parser.add_argument("--pdf", action="store_true", help="Generar reporte PDF")
@@ -148,6 +153,71 @@ Ejemplos de uso:
     if args.pentest:
         escaneo_completo_pentesting(args.pentest)
 
+    # Análisis remoto SSH
+    if args.remotessh:
+        if not args.host or not args.user:
+            logger.error("Debe especificar --host y --user para análisis remoto")
+            return
+
+        hostname = args.host.strip()
+        username = args.user.strip()
+        port = args.port
+        key_file = args.key.strip() if args.key else None
+        password = args.password.strip() if args.password else None
+
+        if not key_file and not password:
+            logger.error("Debe proporcionar --key o --password para autenticación SSH")
+            return
+
+        if key_file and password:
+            logger.error("Proporcione solo --key o --password, no ambos")
+            return
+
+        logger.info(f"🔍 Ejecutando análisis remoto {args.type} en {hostname}:{port} como {username}")
+
+        if password and not key_file:
+            logger.info("🔐 Intentando instalar clave SSH automáticamente...")
+            success = ensure_ssh_key_and_push(hostname, username, password, port)
+            if success:
+                key_file = "/root/.ssh/id_rsa"
+            else:
+                logger.warning("⚠️ No se pudo instalar la clave automáticamente, se continuará con password")
+
+        try:
+            config = RemoteForensicConfig().config
+        except Exception as e:
+            logger.warning(f"⚠️ Error cargando configuración remota: {e}")
+            config = {
+                'ssh_timeout': 60,
+                'max_concurrent': 3,
+                'evidence_dir': './forensic_evidence'
+            }
+
+        scanner = RemoteForensicScanner(config)
+
+        if not scanner.test_ssh_connection(hostname, username, key_file, port, password):
+            logger.error("❌ No se pudo conectar por SSH al host remoto")
+            return
+
+        evidence = {}
+        vulnerabilities = {}
+
+        try:
+            if args.type == "quick":
+                evidence = scanner.quick_scan(hostname, username, key_file, port, password)
+            elif args.type == "vulnerability":
+                vulnerabilities = scanner.vulnerability_assessment(hostname, username, key_file, port, password)
+            elif args.type == "comprehensive":
+                evidence = scanner.comprehensive_system_analysis(hostname, username, key_file, port, password)
+                vulnerabilities = scanner.vulnerability_assessment(hostname, username, key_file, port, password)
+            else:  # standard
+                evidence = scanner.comprehensive_system_analysis(hostname, username, key_file, port, password)
+        except Exception as e:
+            logger.error(f"Error durante análisis remoto: {e}")
+            return
+
+        FINDINGS.append(f"[REMOTE_SSH_SCAN] Análisis remoto completado en {hostname}:{port}")
+
     # Reportes
     if args.json:
         exportar_json()
@@ -169,4 +239,3 @@ Ejemplos de uso:
 
 if __name__ == "__main__":
     main()
-
