@@ -1,5 +1,4 @@
 version: '3.8'
-
 services:
   cyberscope-web:
     build: .
@@ -14,6 +13,7 @@ services:
       - FLASK_ENV=production
       - PYTHONPATH=/app
       - SSH_AUTH_SOCK=${SSH_AUTH_SOCK}
+      - GROQ_API_KEY=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
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
