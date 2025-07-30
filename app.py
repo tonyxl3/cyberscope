@@ -28,6 +28,7 @@ from cyberscope.core.chatgpt_analyzer import ChatGPTAnalyzer, ChatGPTFallbackAna
 from cyberscope.core.pdf_generator import CyberScopePDFGenerator
 from cyberscope.core.remote_scanner import RemoteForensicScanner
 from cyberscope.core.remote_config import RemoteForensicConfig
+from cyberscope.core.remote_key_manager import ensure_ssh_key_and_push
 
 app = Flask(__name__)
 app.secret_key = 'cyberscope-secret-key-2024'
