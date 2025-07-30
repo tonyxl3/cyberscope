@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Sistema de Análisis Forense Remoto SSH - CyberScope v2.0 - CORREGIDO
-Análisis forense sin rastros en servidores remotos
+Análisis forense sin rastros en servidores remotos + Análisis IA con Groq
 """
 
 import os
@@ -19,8 +19,16 @@ from typing import Dict, List, Optional, Tuple
 from .utils import FINDINGS, logger
 from .remote_config import RemoteForensicConfig
 
+# === GROQ INTEGRATION ===
+try:
+    from groq import Groq
+    GROQ_DISPONIBLE = True
+except ImportError:
+    GROQ_DISPONIBLE = False
+    logger.warning("Groq no está instalado. Análisis IA no disponible para forensics remotos")
+
 class RemoteForensicScanner:
-    """Scanner forense remoto que no deja rastros en el servidor objetivo"""
+    """Scanner forense remoto que no deja rastros en el servidor objetivo + Análisis IA"""
     
     def __init__(self, config: Dict = None):
         """
@@ -42,8 +50,177 @@ class RemoteForensicScanner:
         # Crear directorio de evidencia
         os.makedirs(self.evidence_dir, exist_ok=True)
         
+        # Verificar disponibilidad de Groq
+        self.groq_available = self._check_groq_availability()
+        
         logger.info(f"Scanner forense remoto inicializado - Sesión: {self.session_id}")
+        logger.info(f"Análisis IA forense: {'✅ Disponible' if self.groq_available else '❌ No disponible'}")
         FINDINGS.append(f"[REMOTE_INIT] Sesión forense iniciada: {self.session_id}")
+        if self.groq_available:
+            FINDINGS.append("[REMOTE_AI] ✅ Análisis IA forense habilitado")
+    
+    def _check_groq_availability(self) -> bool:
+        """Verifica si Groq está disponible y configurado"""
+        if not GROQ_DISPONIBLE:
+            return False
+        
+        api_key = os.getenv('GROQ_API_KEY')
+        if not api_key or not api_key.startswith('gsk_'):
+            logger.warning("GROQ_API_KEY no configurada correctamente para análisis forense")
+            return False
+        
+        return True
+    
+    def _generate_forensic_ai_analysis(self, evidence_data: Dict, analysis_type: str = "comprehensive") -> str:
+        """
+        Genera análisis IA profesional de evidencia forense
+        
+        Args:
+            evidence_data: Datos de evidencia recopilados
+            analysis_type: Tipo de análisis ("quick", "comprehensive", "vulnerability")
+            
+        Returns:
+            str: Análisis IA profesional
+        """
+        if not self.groq_available:
+            return "⚠️ Análisis IA forense no disponible - Groq no configurado"
+        
+        try:
+            client = Groq(api_key=os.getenv('GROQ_API_KEY'))
+            
+            # Preparar evidencia para análisis
+            formatted_evidence = self._format_evidence_for_ai(evidence_data)
+            
+            # Seleccionar prompt según tipo de análisis
+            if analysis_type == "quick":
+                prompt = self._get_quick_analysis_prompt(formatted_evidence)
+            elif analysis_type == "vulnerability":
+                prompt = self._get_vulnerability_analysis_prompt(formatted_evidence)
+            else:
+                prompt = self._get_comprehensive_analysis_prompt(formatted_evidence)
+            
+            logger.info(f"🤖 Generando análisis IA forense: {analysis_type}")
+            
+            chat_completion = client.chat.completions.create(
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "Eres un experto forense digital y consultor senior en ciberseguridad especializado en análisis de sistemas Linux/Unix. Proporciona análisis profesionales, precisos y actionables."
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                model="llama-3.1-70b-versatile",
+                max_tokens=2000,
+                temperature=0.3
+            )
+            
+            analysis = chat_completion.choices[0].message.content
+            logger.info(f"✅ Análisis IA forense generado: {len(analysis)} caracteres")
+            return analysis
+            
+        except Exception as e:
+            logger.error(f"💥 Error en análisis IA forense: {e}")
+            return f"⚠️ Error en análisis IA forense: {str(e)}"
+    
+    def _format_evidence_for_ai(self, evidence_data: Dict) -> str:
+        """Formatea la evidencia para análisis IA"""
+        formatted = []
+        
+        for category, data in evidence_data.items():
+            formatted.append(f"\n=== {category.upper()} ===")
+            
+            if isinstance(data, dict):
+                if "vulnerabilities_found" in data:
+                    # Formato para análisis de vulnerabilidades
+                    if data["vulnerabilities_found"]:
+                        formatted.append("VULNERABILIDADES ENCONTRADAS:")
+                        for vuln in data["vulnerabilities_found"]:
+                            formatted.append(f"- {vuln}")
+                    
+                    if "evidence" in data:
+                        formatted.append("EVIDENCIA:")
+                        for key, evidence in data["evidence"].items():
+                            if isinstance(evidence, dict) and "output" in evidence:
+                                output_preview = evidence["output"][:200]
+                                formatted.append(f"{key}: {output_preview}...")
+                else:
+                    # Formato para evidencia general
+                    for key, value in data.items():
+                        if isinstance(value, dict) and "output" in value:
+                            output_preview = value["output"][:200]
+                            formatted.append(f"{key}: {output_preview}...")
+                        else:
+                            formatted.append(f"{key}: {str(value)[:100]}...")
+        
+        return "\n".join(formatted)
+    
+    def _get_quick_analysis_prompt(self, evidence: str) -> str:
+        """Prompt para análisis rápido"""
+        return f"""
+Analiza la siguiente evidencia forense de un escaneo rápido y proporciona:
+
+1. RESUMEN EJECUTIVO (3-4 líneas)
+2. HALLAZGOS PRINCIPALES (máximo 5 puntos)
+3. NIVEL DE RIESGO: [Crítico/Alto/Medio/Bajo/Informativo]
+4. ACCIONES INMEDIATAS RECOMENDADAS (máximo 3)
+
+EVIDENCIA FORENSE:
+{evidence}
+
+Responde en español, de forma concisa y profesional. Enfócate en los hallazgos más importantes para la seguridad.
+"""
+    
+    def _get_comprehensive_analysis_prompt(self, evidence: str) -> str:
+        """Prompt para análisis comprehensivo"""
+        return f"""
+Realiza un análisis forense digital completo de la siguiente evidencia y proporciona:
+
+1. RESUMEN EJECUTIVO
+2. ANÁLISIS POR CATEGORÍAS:
+   - Identificación del Sistema
+   - Actividad de Usuarios
+   - Procesos y Servicios
+   - Configuración de Red
+   - Sistema de Archivos
+   - Configuración de Seguridad
+
+3. HALLAZGOS DE SEGURIDAD CRÍTICOS
+4. INDICADORES DE COMPROMISO (IoCs)
+5. RECOMENDACIONES FORENSES ESPECÍFICAS
+6. NIVEL DE RIESGO GENERAL
+
+EVIDENCIA FORENSE:
+{evidence}
+
+Proporciona un análisis detallado y profesional en español, como lo haría un experto forense digital.
+"""
+    
+    def _get_vulnerability_analysis_prompt(self, evidence: str) -> str:
+        """Prompt para análisis de vulnerabilidades"""
+        return f"""
+Analiza las siguientes vulnerabilidades encontradas en el sistema y proporciona:
+
+1. RESUMEN DE VULNERABILIDADES
+2. CLASIFICACIÓN POR CRITICIDAD:
+   - CRÍTICAS (Explotación inmediata)
+   - ALTAS (Requieren atención urgente)
+   - MEDIAS (Deben ser corregidas)
+   - BAJAS (Buenas prácticas)
+
+3. VECTORES DE ATAQUE POTENCIALES
+4. PLAN DE REMEDIACIÓN PRIORIZADO
+5. MEDIDAS DE MITIGACIÓN INMEDIATAS
+
+EVIDENCIA DE VULNERABILIDADES:
+{evidence}
+
+Responde como un consultor senior en ciberseguridad, en español, con recomendaciones específicas y actionables.
+"""
+
+    # === TU CÓDIGO ORIGINAL CON MEJORAS ===
     
     def test_ssh_connection(self, hostname: str, username: str, key_file: str = None, 
                            port: int = 22, password: str = None) -> bool:
@@ -346,7 +523,7 @@ class RemoteForensicScanner:
     def quick_scan(self, hostname: str, username: str, key_file: str = None, 
                    port: int = 22, password: str = None) -> Dict:
         """
-        Escaneo rápido del sistema remoto
+        Escaneo rápido del sistema remoto + Análisis IA
         
         Args:
             hostname: Host objetivo
@@ -356,7 +533,7 @@ class RemoteForensicScanner:
             password: Contraseña SSH
             
         Returns:
-            Dict: Evidencia recopilada
+            Dict: Evidencia recopilada + análisis IA
         """
         logger.info(f"🚀 Iniciando escaneo rápido de {hostname}")
         FINDINGS.append(f"[QUICK_SCAN] Iniciando escaneo rápido de {hostname}")
@@ -405,13 +582,24 @@ class RemoteForensicScanner:
         logger.info(f"✅ Escaneo rápido completado: {success_count}/{total_commands} comandos exitosos")
         FINDINGS.append(f"[QUICK_COMPLETE] Escaneo rápido completado: {success_count}/{total_commands} comandos exitosos")
         
+        # === ANÁLISIS IA AGREGADO ===
+        if evidence and self.groq_available:
+            logger.info("🤖 Generando análisis IA del escaneo rápido...")
+            ai_analysis = self._generate_forensic_ai_analysis(evidence, "quick")
+            evidence["ai_analysis"] = {
+                "analysis": ai_analysis,
+                "generated_at": datetime.now().isoformat(),
+                "type": "quick_scan"
+            }
+            FINDINGS.append("[QUICK_AI] ✅ Análisis IA del escaneo rápido generado")
+        
         return evidence
     
     def comprehensive_system_analysis(self, hostname: str, username: str, 
                                     key_file: str = None, port: int = 22, 
                                     password: str = None) -> Dict:
         """
-        Análisis forense completo del sistema
+        Análisis forense completo del sistema + Análisis IA
         
         Args:
             hostname: Host objetivo
@@ -421,7 +609,7 @@ class RemoteForensicScanner:
             password: Contraseña SSH
             
         Returns:
-            Dict: Evidencia forense completa
+            Dict: Evidencia forense completa + análisis IA
         """
         logger.info(f"🔍 Iniciando análisis forense completo de {hostname}")
         FINDINGS.append(f"[FORENSIC_ANALYSIS] Iniciando análisis completo de {hostname}")
@@ -514,13 +702,24 @@ class RemoteForensicScanner:
         logger.info(f"🎯 Análisis forense completado: {completed_categories}/{total_categories} categorías procesadas")
         FINDINGS.append(f"[FORENSIC_COMPLETE] Análisis forense completado: {len(evidence)} categorías")
         
+        # === ANÁLISIS IA AGREGADO ===
+        if evidence and self.groq_available:
+            logger.info("🤖 Generando análisis IA forense completo...")
+            ai_analysis = self._generate_forensic_ai_analysis(evidence, "comprehensive")
+            evidence["ai_analysis"] = {
+                "analysis": ai_analysis,
+                "generated_at": datetime.now().isoformat(),
+                "type": "comprehensive_analysis"
+            }
+            FINDINGS.append("[FORENSIC_AI] ✅ Análisis IA forense completo generado")
+        
         return evidence
     
     def vulnerability_assessment(self, hostname: str, username: str, 
                                key_file: str = None, port: int = 22, 
                                password: str = None) -> Dict:
         """
-        Evaluación de vulnerabilidades del sistema remoto
+        Evaluación de vulnerabilidades del sistema remoto + Análisis IA
         
         Args:
             hostname: Host objetivo
@@ -530,7 +729,7 @@ class RemoteForensicScanner:
             password: Contraseña SSH
             
         Returns:
-            Dict: Vulnerabilidades encontradas
+            Dict: Vulnerabilidades encontradas + análisis IA
         """
         logger.info(f"🛡️ Iniciando evaluación de vulnerabilidades en {hostname}")
         FINDINGS.append(f"[VULN_ASSESSMENT] Iniciando evaluación de vulnerabilidades")
@@ -612,6 +811,18 @@ class RemoteForensicScanner:
         logger.info(f"🛡️ Evaluación de vulnerabilidades completada: {total_vulns_found} vulnerabilidades encontradas")
         FINDINGS.append(f"[VULN_COMPLETE] Evaluación completada: {total_vulns_found} vulnerabilidades encontradas")
         
+        # === ANÁLISIS IA DE VULNERABILIDADES AGREGADO ===
+        if vulnerabilities and self.groq_available:
+            logger.info("🤖 Generando análisis IA de vulnerabilidades...")
+            ai_analysis = self._generate_forensic_ai_analysis(vulnerabilities, "vulnerability")
+            vulnerabilities["ai_analysis"] = {
+                "analysis": ai_analysis,
+                "generated_at": datetime.now().isoformat(),
+                "type": "vulnerability_assessment",
+                "total_vulnerabilities": total_vulns_found
+            }
+            FINDINGS.append("[VULN_AI] ✅ Análisis IA de vulnerabilidades generado")
+        
         return vulnerabilities
     
     def _analyze_vulnerability_output(self, check_name: str, output: str) -> List[str]:
@@ -649,6 +860,218 @@ class RemoteForensicScanner:
                 vulnerabilities.append("Base de datos detectada - verificar configuración de seguridad")
         
         return vulnerabilities
+    
+    def generate_comprehensive_forensic_report(self, hostname: str, username: str, 
+                                             key_file: str = None, port: int = 22, 
+                                             password: str = None) -> Dict:
+        """
+        Genera un reporte forense completo con todos los análisis + IA
+        
+        Args:
+            hostname: Host objetivo
+            username: Usuario SSH
+            key_file: Archivo de clave privada
+            port: Puerto SSH
+            password: Contraseña SSH
+            
+        Returns:
+            Dict: Reporte forense completo
+        """
+        logger.info(f"📋 Generando reporte forense completo para {hostname}")
+        FINDINGS.append(f"[COMPREHENSIVE_REPORT] Iniciando reporte completo de {hostname}")
+        
+        comprehensive_report = {
+            "metadata": {
+                "hostname": hostname,
+                "session_id": self.session_id,
+                "start_time": self.start_time.isoformat(),
+                "generated_at": datetime.now().isoformat(),
+                "groq_enabled": self.groq_available
+            }
+        }
+        
+        try:
+            # 1. Prueba de conexión
+            if not self.test_ssh_connection(hostname, username, key_file, port, password):
+                comprehensive_report["error"] = "Fallo en conexión SSH"
+                return comprehensive_report
+            
+            # 2. Escaneo rápido
+            logger.info("🚀 Ejecutando escaneo rápido...")
+            quick_scan_results = self.quick_scan(hostname, username, key_file, port, password)
+            comprehensive_report["quick_scan"] = quick_scan_results
+            
+            # 3. Análisis forense completo
+            logger.info("🔍 Ejecutando análisis forense completo...")
+            forensic_results = self.comprehensive_system_analysis(hostname, username, key_file, port, password)
+            comprehensive_report["forensic_analysis"] = forensic_results
+            
+            # 4. Evaluación de vulnerabilidades
+            logger.info("🛡️ Ejecutando evaluación de vulnerabilidades...")
+            vuln_results = self.vulnerability_assessment(hostname, username, key_file, port, password)
+            comprehensive_report["vulnerability_assessment"] = vuln_results
+            
+            # 5. Análisis IA consolidado
+            if self.groq_available:
+                logger.info("🤖 Generando análisis IA consolidado...")
+                consolidated_data = {
+                    "quick_scan": quick_scan_results,
+                    "forensic_analysis": forensic_results,
+                    "vulnerabilities": vuln_results
+                }
+                
+                consolidated_ai_analysis = self._generate_consolidated_ai_analysis(consolidated_data)
+                comprehensive_report["consolidated_ai_analysis"] = {
+                    "analysis": consolidated_ai_analysis,
+                    "generated_at": datetime.now().isoformat(),
+                    "type": "consolidated_report"
+                }
+                FINDINGS.append("[CONSOLIDATED_AI] ✅ Análisis IA consolidado generado")
+            
+            # 6. Resumen ejecutivo
+            comprehensive_report["executive_summary"] = self._generate_executive_summary(comprehensive_report)
+            
+            # 7. Metadatos finales
+            comprehensive_report["metadata"]["end_time"] = datetime.now().isoformat()
+            comprehensive_report["metadata"]["total_duration"] = str(datetime.now() - self.start_time)
+            comprehensive_report["metadata"]["evidence_chain_entries"] = len(self.evidence_chain)
+            
+            logger.info("✅ Reporte forense completo generado exitosamente")
+            FINDINGS.append("[COMPREHENSIVE_COMPLETE] ✅ Reporte forense completo generado")
+            
+            return comprehensive_report
+            
+        except Exception as e:
+            logger.error(f"💥 Error generando reporte completo: {e}")
+            FINDINGS.append(f"[COMPREHENSIVE_ERROR] Error: {str(e)}")
+            comprehensive_report["error"] = str(e)
+            return comprehensive_report
+    
+    def _generate_consolidated_ai_analysis(self, consolidated_data: Dict) -> str:
+        """Genera análisis IA consolidado de todos los datos"""
+        try:
+            client = Groq(api_key=os.getenv('GROQ_API_KEY'))
+            
+            formatted_data = self._format_consolidated_data(consolidated_data)
+            
+            prompt = f"""
+Como experto forense digital senior, analiza todos los datos recopilados y proporciona un ANÁLISIS CONSOLIDADO:
+
+1. RESUMEN EJECUTIVO GENERAL
+2. PERFIL DEL SISTEMA OBJETIVO
+3. HALLAZGOS CRÍTICOS CONSOLIDADOS
+4. EVALUACIÓN DE RIESGO INTEGRAL
+5. INDICADORES DE COMPROMISO (IoCs) IDENTIFICADOS
+6. CRONOLOGÍA DE EVENTOS SOSPECHOSOS
+7. RECOMENDACIONES ESTRATÉGICAS PRIORITARIAS
+8. PLAN DE RESPUESTA A INCIDENTES
+
+DATOS FORENSES CONSOLIDADOS:
+{formatted_data}
+
+Proporciona un análisis profesional integral que combine todos los hallazgos en un informe cohesivo y actionable en español.
+"""
+            
+            chat_completion = client.chat.completions.create(
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "Eres un consultor senior en forensics digitales y respuesta a incidentes con 15+ años de experiencia. Proporciona análisis consolidados profesionales que integren todos los hallazgos en recomendaciones estratégicas."
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                model="llama-3.1-70b-versatile",
+                max_tokens=2500,
+                temperature=0.2
+            )
+            
+            return chat_completion.choices[0].message.content
+            
+        except Exception as e:
+            logger.error(f"💥 Error en análisis IA consolidado: {e}")
+            return f"⚠️ Error en análisis IA consolidado: {str(e)}"
+    
+    def _format_consolidated_data(self, data: Dict) -> str:
+        """Formatea datos consolidados para análisis IA"""
+        formatted = []
+        
+        # Escaneo rápido
+        if "quick_scan" in data:
+            formatted.append("\n=== ESCANEO RÁPIDO ===")
+            for key, value in data["quick_scan"].items():
+                if key != "ai_analysis" and isinstance(value, dict) and "output" in value:
+                    formatted.append(f"{key}: {value['output'][:150]}...")
+        
+        # Análisis forense
+        if "forensic_analysis" in data:
+            formatted.append("\n=== ANÁLISIS FORENSE ===")
+            for category, content in data["forensic_analysis"].items():
+                if category != "ai_analysis" and isinstance(content, dict):
+                    formatted.append(f"\n[{category.upper()}]")
+                    for subcategory, details in content.items():
+                        if isinstance(details, dict) and "output" in details:
+                            formatted.append(f"{subcategory}: {details['output'][:100]}...")
+        
+        # Vulnerabilidades
+        if "vulnerabilities" in data:
+            formatted.append("\n=== VULNERABILIDADES ===")
+            for category, vulns in data["vulnerabilities"].items():
+                if category != "ai_analysis" and isinstance(vulns, dict):
+                    if vulns.get("vulnerabilities_found"):
+                        formatted.append(f"\n[{category.upper()}] - VULNERABILIDADES:")
+                        for vuln in vulns["vulnerabilities_found"]:
+                            formatted.append(f"- {vuln}")
+        
+        return "\n".join(formatted)
+    
+    def _generate_executive_summary(self, report: Dict) -> Dict:
+        """Genera resumen ejecutivo del reporte"""
+        summary = {
+            "timestamp": datetime.now().isoformat(),
+            "session_id": self.session_id,
+            "analysis_duration": str(datetime.now() - self.start_time),
+            "components_analyzed": [],
+            "total_vulnerabilities": 0,
+            "risk_level": "INFORMATIVO",
+            "key_findings": []
+        }
+        
+        # Contar componentes analizados
+        if "quick_scan" in report:
+            summary["components_analyzed"].append("Escaneo Rápido")
+        if "forensic_analysis" in report:
+            summary["components_analyzed"].append("Análisis Forense")
+        if "vulnerability_assessment" in report:
+            summary["components_analyzed"].append("Evaluación de Vulnerabilidades")
+        
+        # Contar vulnerabilidades totales
+        if "vulnerability_assessment" in report:
+            for category, data in report["vulnerability_assessment"].items():
+                if isinstance(data, dict) and "vulnerabilities_found" in data:
+                    summary["total_vulnerabilities"] += len(data["vulnerabilities_found"])
+        
+        # Determinar nivel de riesgo
+        if summary["total_vulnerabilities"] >= 10:
+            summary["risk_level"] = "CRÍTICO"
+        elif summary["total_vulnerabilities"] >= 5:
+            summary["risk_level"] = "ALTO"
+        elif summary["total_vulnerabilities"] >= 2:
+            summary["risk_level"] = "MEDIO"
+        elif summary["total_vulnerabilities"] >= 1:
+            summary["risk_level"] = "BAJO"
+        
+        # Hallazgos clave básicos
+        summary["key_findings"] = [
+            f"Sistema analizado: {report['metadata']['hostname']}",
+            f"Vulnerabilidades encontradas: {summary['total_vulnerabilities']}",
+            f"Análisis IA: {'✅ Habilitado' if report['metadata']['groq_enabled'] else '❌ No disponible'}",
+            f"Duración del análisis: {summary['analysis_duration']}"
+        ]
+        
+        return summary
     
     def export_evidence_chain(self, output_file: str) -> str:
         """
