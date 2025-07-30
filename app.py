@@ -473,6 +473,13 @@ def remote_scan():
         logger.info(f"Iniciando análisis remoto: {hostname}:{port} como {username} (tipo: {scan_type})")
         FINDINGS.append(f"[REMOTE_INIT] Iniciando análisis {scan_type} de {hostname}:{port}")
 
+        if password and not key_file:  
+            logger.info("🔐 Instalando clave SSH automática usando sshpass...")
+            from cyberscope.core.remote_key_manager import ensure_ssh_key_and_push
+            installed = ensure_ssh_key_and_push(hostname, username, password, port)
+            if not installed:
+                logger.warning("⚠️ No se pudo instalar la clave SSH automáticamente")
+        
         if not scanner.test_ssh_connection(hostname, username, key_file, port, password):
             error_msg = f"No se pudo establecer conexión SSH con {hostname}:{port}"
             logger.error(error_msg)
