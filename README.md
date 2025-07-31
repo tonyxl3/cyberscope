@@ -26,19 +26,28 @@ docker-compose up --build
 
 #### 🔧 Configuración de ChatGPT (Opcional)
 
-Para habilitar el análisis inteligente con ChatGPT, configura tu API key:
+Para habilitar el análisis inteligente con Groq (GRATUITO), configura tu API key:
 
 ```bash
-# Opción 1: Variable de entorno
-export OPENAI_API_KEY="tu-api-key-aqui"
+# Opción 1: Archivo .env (Recomendado)
+echo "GROQ_API_KEY=gsk_tu_api_key_aqui" > .env
 docker-compose up --build
 
-# Opción 2: Archivo .env
-echo "OPENAI_API_KEY=tu-api-key-aqui" > .env
+# Opción 2: Variable de entorno
+export GROQ_API_KEY="gsk_tu_api_key_aqui"
 docker-compose up --build
 ```
 
+#### 🆓 Obtener API Key de Groq (Gratis)
+
+1. **Ve a**: https://console.groq.com
+2. **Regístrate** con tu email (completamente gratis)
+3. **Crea API Key**: Ve a "API Keys" → "Create API Key"
+4. **Copia la key** (empieza con `gsk_`)
+5. **Configura**: Agrega a `.env` o variable de entorno
+
 **Sin API Key**: CyberScope funcionará con un analizador de respaldo que proporciona análisis básico usando reglas predefinidas.
+
 #### 📋 Características de la Interfaz Web
 
 **Análisis Web:**

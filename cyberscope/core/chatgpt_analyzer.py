@@ -5,6 +5,16 @@ from datetime import datetime
 import re
 from .utils import FINDINGS, logger
 
+# Verificar disponibilidad de Groq
+try:
+    from groq import Groq
+    GROQ_AVAILABLE = True
+    logger.info("✅ Librería Groq importada correctamente")
+except ImportError:
+    GROQ_AVAILABLE = False
+    logger.warning("⚠️ Librería Groq no disponible. Instalar con: pip install groq")
+    Groq = None
+
 class GroqAnalyzer:
     def __init__(self, api_key=None):
         """
@@ -14,8 +24,18 @@ class GroqAnalyzer:
             api_key (str): API key de Groq (gratuita)
         """
         self.api_key = api_key
-        self.base_url = "https://api.groq.com/openai/v1/chat/completions"
-        self.model = "llama-3.1-70b-versatile"  # Modelo gratuito muy potente
+        self.model = "llama-3.1-70b-versatile"
+        self.available = GROQ_AVAILABLE and bool(api_key)
+        
+        if not GROQ_AVAILABLE:
+            logger.warning("⚠️ Groq no disponible - librería no instalada")
+        elif not api_key:
+            logger.warning("⚠️ Groq no disponible - API key no configurada")
+        elif not api_key.startswith('gsk_'):
+            logger.warning("⚠️ Groq API key parece inválida (debe empezar con 'gsk_')")
+            self.available = False
+        else:
+            logger.info("✅ Groq configurado correctamente")
         
     def analyze_findings_with_groq(self, findings_list, target_info=None):
         """
@@ -28,6 +48,10 @@ class GroqAnalyzer:
         Returns:
             dict: Análisis procesado por Groq
         """
+        if not self.available:
+            logger.warning("Groq no disponible, saltando análisis IA")
+            return None
+            
         try:
             # Preparar el prompt para Groq
             prompt = self._create_analysis_prompt(findings_list, target_info)
@@ -119,58 +143,51 @@ IMPORTANTE:
         Returns:
             str: Respuesta de Groq o None si hay error
         """
-        if not self.api_key:
+        if not self.available:
             logger.warning("No se proporcionó API key de Groq")
             return None
         
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }
-        
-        data = {
-            "model": self.model,
-            "messages": [
-                {
-                    "role": "system",
-                    "content": "Eres un experto en ciberseguridad que explica hallazgos técnicos de forma clara y comprensible para usuarios no técnicos. Tus análisis son precisos, prácticos y están orientados a la acción."
-                },
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
-            "max_tokens": 2500,
-            "temperature": 0.3,
-            "top_p": 0.9,
-            "stream": False
-        }
-        
         try:
-            logger.info("Enviando análisis a Groq AI...")
-            response = requests.post(self.base_url, headers=headers, json=data, timeout=45)
+            # Usar la librería oficial de Groq
+            client = Groq(api_key=self.api_key)
             
-            if response.status_code == 200:
-                result = response.json()
-                content = result['choices'][0]['message']['content']
-                logger.info("Análisis Groq completado exitosamente")
-                return content
-            elif response.status_code == 401:
-                logger.error("API key de Groq inválida o expirada")
-                return None
-            elif response.status_code == 429:
-                logger.warning("Límite de rate de Groq alcanzado, reintentando...")
-                time.sleep(10)
-                return self._send_to_groq_api(prompt)  # Retry una vez
-            else:
-                logger.error(f"Error API Groq: {response.status_code} - {response.text}")
-                return None
+            logger.info("Enviando análisis a Groq AI...")
+            
+            chat_completion = client.chat.completions.create(
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "Eres un experto en ciberseguridad que explica hallazgos técnicos de forma clara y comprensible para usuarios no técnicos. Tus análisis son precisos, prácticos y están orientados a la acción."
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                model=self.model,
+                max_tokens=2500,
+                temperature=0.3,
+                top_p=0.9
+            )
+            
+            content = chat_completion.choices[0].message.content
+            logger.info("✅ Análisis Groq completado exitosamente")
+            return content
                 
-        except requests.exceptions.Timeout:
-            logger.error("Timeout en API de Groq")
-            return None
         except Exception as e:
-            logger.error(f"Error enviando a Groq API: {e}")
+            error_msg = str(e).lower()
+            if "authentication" in error_msg or "unauthorized" in error_msg:
+                logger.error("❌ API key de Groq inválida o expirada")
+                FINDINGS.append("[GROQ_ERROR] API key inválida - Verifica tu configuración")
+            elif "rate_limit" in error_msg or "429" in error_msg:
+                logger.warning("⚠️ Límite de rate de Groq alcanzado, reintentando...")
+                time.sleep(10)
+                try:
+                    return self._send_to_groq_api(prompt)  # Retry una vez
+                except:
+                    logger.error("❌ Retry falló también")
+            else:
+                logger.error(f"❌ Error enviando a Groq API: {e}")
             return None
     
     def _process_groq_response(self, response_text):

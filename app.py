@@ -44,11 +44,19 @@ os.makedirs(app.config['REPORTS_FOLDER'], exist_ok=True)
 analysis_status = {}
 
 # Configuración de Groq API (GRATUITA)
-GROQ_API_KEY = os.environ.get('GROQ_API_KEY')  # Variable de entorno para Groq
+GROQ_API_KEY = os.environ.get('GROQ_API_KEY', '').strip()  # Variable de entorno para Groq
+
+# Validar API key
+if GROQ_API_KEY and not GROQ_API_KEY.startswith('gsk_'):
+    logger.warning(f"⚠️ GROQ_API_KEY parece inválida: {GROQ_API_KEY[:10]}...")
+    GROQ_API_KEY = None
+
 if GROQ_API_KEY:
     logger.info("🚀 Groq API configurada - Análisis IA disponible")
+    logger.info(f"   API Key: {GROQ_API_KEY[:10]}...{GROQ_API_KEY[-4:]}")
 else:
     logger.info("ℹ️ Groq API no configurada - Usando analizador inteligente")
+    logger.info("   Para habilitar: export GROQ_API_KEY=gsk_tu_api_key")
 
 # Inicializar analizador principal
 analyzer = CyberScopeAnalyzer(GROQ_API_KEY)
@@ -720,7 +728,15 @@ def test_groq_connection():
         if not GROQ_API_KEY:
             return jsonify({
                 'status': 'error',
-                'message': 'API key de Groq no configurada'
+                'message': 'API key de Groq no configurada',
+                'help': 'Configura GROQ_API_KEY en variables de entorno'
+            }), 400
+        
+        if not GROQ_API_KEY.startswith('gsk_'):
+            return jsonify({
+                'status': 'error',
+                'message': 'API key de Groq inválida (debe empezar con gsk_)',
+                'current_key_preview': f"{GROQ_API_KEY[:10]}..."
             }), 400
         
         # Crear un analizador temporal para prueba
@@ -739,26 +755,29 @@ def test_groq_connection():
             'timestamp': datetime.now().isoformat()
         }
         
-        result = test_analyzer.analyzer.analyze_findings(test_findings, test_target)
+        result = test_analyzer.analyze_findings(test_findings, test_target)
         
         if result:
             return jsonify({
                 'status': 'success',
                 'message': 'Conexión con Groq API exitosa',
                 'analyzer': result.get('analyzer', 'Groq'),
-                'test_summary': result.get('executive_summary', '')[:100] + '...'
+                'test_summary': result.get('executive_summary', '')[:100] + '...',
+                'api_key_preview': f"{GROQ_API_KEY[:10]}...{GROQ_API_KEY[-4:]}"
             })
         else:
             return jsonify({
                 'status': 'warning',
-                'message': 'Groq no disponible, usando analizador inteligente'
+                'message': 'Groq no disponible, usando analizador inteligente',
+                'fallback': True
             })
             
     except Exception as e:
         logger.error(f"Error probando Groq: {e}")
         return jsonify({
             'status': 'error',
-            'message': f'Error probando conexión: {str(e)}'
+            'message': f'Error probando conexión: {str(e)}',
+            'error_details': str(e)
         }), 500
 
 if __name__ == '__main__':
@@ -770,14 +789,30 @@ if __name__ == '__main__':
     if GROQ_API_KEY:
         print("✅ Groq API configurada - Análisis IA disponible")
         print("   Modelo: Llama-3.1-70B Versatile (GRATIS)")
+        print(f"   API Key: {GROQ_API_KEY[:10]}...{GROQ_API_KEY[-4:]}")
     else:
         print("ℹ️  Groq API no configurada")
         print("   Usando: Analizador Inteligente de respaldo")
-        print("   Para habilitar Groq: export GROQ_API_KEY=tu_api_key")
+        print("   Para habilitar Groq:")
+        print("     1. Ve a: https://console.groq.com")
+        print("     2. Crea una API key gratuita")
+        print("     3. export GROQ_API_KEY=gsk_tu_api_key")
     
     print(f"📁 Carpeta de reportes: {app.config['REPORTS_FOLDER']}")
     print(f"📁 Carpeta de uploads: {app.config['UPLOAD_FOLDER']}")
     print("🌐 Servidor iniciando en http://localhost:5000")
+    
+    # Test rápido de Groq al inicio
+    if GROQ_API_KEY:
+        try:
+            test_analyzer = CyberScopeAnalyzer(GROQ_API_KEY)
+            if test_analyzer.groq_analyzer and test_analyzer.groq_analyzer.available:
+                print("🧪 Test de Groq: ✅ Conexión exitosa")
+            else:
+                print("🧪 Test de Groq: ⚠️ Configuración incorrecta")
+        except Exception as e:
+            print(f"🧪 Test de Groq: ❌ Error - {e}")
+    
     print("="*60 + "\n")
     
     app.run(host='0.0.0.0', port=5000, debug=True)
