@@ -59,18 +59,17 @@ class GroqAnalyzer:
             # Enviar a Groq API
             response = self._send_to_groq_api(prompt)
             
-            if response:
-                # Procesar respuesta para el usuario
+            if response and isinstance(response, str) and len(response.strip()) > 100:
                 processed_analysis = self._process_groq_response(response)
                 
-                # Agregar a findings
-                FINDINGS.append(f"[GROQ_ANALYSIS] Análisis completado - {len(processed_analysis.get('key_findings', []))} puntos clave identificados")
-                
-                return processed_analysis
-            else:
-                FINDINGS.append("[GROQ_ERROR] No se pudo obtener análisis de Groq")
-                return None
-                
+                if processed_analysis and len(processed_analysis.get("executive_summary", "")) > 20:
+                    FINDINGS.append(f"[GROQ_ANALYSIS] Análisis completado - {len(processed_analysis.get('key_findings', []))} puntos clave identificados")
+                    return processed_analysis
+                    
+            FINDINGS.append("[GROQ_ERROR] No se pudo obtener análisis de Groq")
+            return None
+
+  
         except Exception as e:
             logger.error(f"Error en análisis Groq: {e}")
             FINDINGS.append(f"[GROQ_ERROR] Error en análisis: {str(e)}")
