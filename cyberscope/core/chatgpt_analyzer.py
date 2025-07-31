@@ -201,7 +201,7 @@ IMPORTANTE:
         text = re.sub(r'\s{3,}', '  ', text)
         text = re.sub(r'•\s*•', '•', text)
 
-       return text.strip()
+        return text.strip()
     
     def _process_groq_response(self, response_text):
         """
