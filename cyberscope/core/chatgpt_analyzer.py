@@ -195,11 +195,11 @@ IMPORTANTE:
         """
         if not isinstance(text, str):
             return text
-       # Reemplazos típicos
-       text = text.replace("nn", "\n• ")
-       text = text.replace("n", "\n")
-       text = re.sub(r'\s{3,}', '  ', text)
-       text = re.sub(r'•\s*•', '•', text)
+        # Reemplazos típicos
+        text = text.replace("nn", "\n• ")
+        text = text.replace("n", "\n")
+        text = re.sub(r'\s{3,}', '  ', text)
+        text = re.sub(r'•\s*•', '•', text)
 
        return text.strip()
     
