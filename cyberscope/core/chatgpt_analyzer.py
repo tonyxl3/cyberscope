@@ -171,7 +171,7 @@ IMPORTANTE:
             
             content = chat_completion.choices[0].message.content
             logger.info("✅ Análisis Groq completado exitosamente")
-            return content
+            return self._sanitize_response_text(content)
                 
         except Exception as e:
             error_msg = str(e).lower()
@@ -188,6 +188,20 @@ IMPORTANTE:
             else:
                 logger.error(f"❌ Error enviando a Groq API: {e}")
             return None
+
+    def _sanitize_response_text(self, text):
+        """
+        Limpia artefactos comunes como 'n', 'nn', espacios incorrectos, etc.
+        """
+        if not isinstance(text, str):
+            return text
+       # Reemplazos típicos
+       text = text.replace("nn", "\n• ")
+       text = text.replace("n", "\n")
+       text = re.sub(r'\s{3,}', '  ', text)
+       text = re.sub(r'•\s*•', '•', text)
+
+       return text.strip()
     
     def _process_groq_response(self, response_text):
         """
