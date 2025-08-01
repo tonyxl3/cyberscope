@@ -790,6 +790,16 @@ if __name__ == '__main__':
         print("✅ Groq API configurada - Análisis IA disponible")
         print("   Modelo: Llama-3.1-70B Versatile (GRATIS)")
         print(f"   API Key: {GROQ_API_KEY[:10]}...{GROQ_API_KEY[-4:]}")
+        
+        # Test rápido de Groq al inicio
+        try:
+            test_analyzer = CyberScopeAnalyzer(GROQ_API_KEY)
+            if test_analyzer.groq_analyzer and test_analyzer.groq_analyzer.available:
+                print("🧪 Test de Groq: ✅ Conexión exitosa")
+            else:
+                print("🧪 Test de Groq: ⚠️ Configuración incorrecta")
+        except Exception as e:
+            print(f"🧪 Test de Groq: ❌ Error - {e}")
     else:
         print("ℹ️  Groq API no configurada")
         print("   Usando: Analizador Inteligente de respaldo")
@@ -801,17 +811,6 @@ if __name__ == '__main__':
     print(f"📁 Carpeta de reportes: {app.config['REPORTS_FOLDER']}")
     print(f"📁 Carpeta de uploads: {app.config['UPLOAD_FOLDER']}")
     print("🌐 Servidor iniciando en http://localhost:5000")
-    
-    # Test rápido de Groq al inicio
-    if GROQ_API_KEY:
-        try:
-            test_analyzer = CyberScopeAnalyzer(GROQ_API_KEY)
-            if test_analyzer.groq_analyzer and test_analyzer.groq_analyzer.available:
-                print("🧪 Test de Groq: ✅ Conexión exitosa")
-            else:
-                print("🧪 Test de Groq: ⚠️ Configuración incorrecta")
-        except Exception as e:
-            print(f"🧪 Test de Groq: ❌ Error - {e}")
     
     print("="*60 + "\n")
     

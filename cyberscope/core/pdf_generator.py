@@ -356,37 +356,53 @@ class CyberScopePDFGenerator:
         
         return elements
 
-    def create_chatgpt_analysis_section(self, chatgpt_analysis):
-        """Crea la sección de análisis de ChatGPT"""
+    def create_ai_analysis_section(self, ai_analysis):
+        """Crea la sección de análisis de IA (Groq/Smart Analyzer)"""
         elements = []
         
-        elements.append(Paragraph("Análisis Inteligente (ChatGPT)", self.styles['CyberScopeTitle']))
+        # Determinar el tipo de analizador usado
+        analyzer_name = ai_analysis.get('analyzer', 'Analizador IA')
+        if 'Groq' in analyzer_name:
+            title = "Análisis Inteligente (Groq AI)"
+        elif 'Smart' in analyzer_name:
+            title = "Análisis Inteligente (Smart Analyzer)"
+        else:
+            title = "Análisis Inteligente"
+            
+        elements.append(Paragraph(title, self.styles['CyberScopeTitle']))
         elements.append(Spacer(1, 0.3*inch))
         
         # Texto simplificado
-        if chatgpt_analysis.get('simplified_text'):
+        if ai_analysis.get('simplified_text'):
             elements.append(Paragraph("Explicación Simplificada:", self.styles['SectionTitle']))
-            elements.append(Paragraph(chatgpt_analysis['simplified_text'], self.styles['ChatGPTAnalysis']))
+            
+            # Limpiar texto antes de agregarlo al PDF
+            simplified_text = ai_analysis['simplified_text']
+            simplified_text = simplified_text.replace('nn', '<br/><br/>')
+            simplified_text = simplified_text.replace('n', '<br/>')
+            simplified_text = re.sub(r'<br/>{3,}', '<br/><br/>', simplified_text)
+            
+            elements.append(Paragraph(simplified_text, self.styles['ChatGPTAnalysis']))
             elements.append(Spacer(1, 0.2*inch))
         
         # Vulnerabilidades identificadas
-        if chatgpt_analysis.get('vulnerabilities'):
+        if ai_analysis.get('vulnerabilities'):
             elements.append(Paragraph("Vulnerabilidades Identificadas:", self.styles['SectionTitle']))
-            for vuln in chatgpt_analysis['vulnerabilities']:
+            for vuln in ai_analysis['vulnerabilities']:
                 elements.append(Paragraph(f"⚠️ {vuln}", self.styles['CriticalFinding']))
             elements.append(Spacer(1, 0.2*inch))
         
         # Recomendaciones
-        if chatgpt_analysis.get('recommendations'):
+        if ai_analysis.get('recommendations'):
             elements.append(Paragraph("Recomendaciones:", self.styles['SectionTitle']))
-            for rec in chatgpt_analysis['recommendations']:
+            for rec in ai_analysis['recommendations']:
                 elements.append(Paragraph(f"✓ {rec}", self.styles['Recommendation']))
             elements.append(Spacer(1, 0.2*inch))
         
         # Términos técnicos explicados
-        if chatgpt_analysis.get('technical_terms'):
+        if ai_analysis.get('technical_terms'):
             elements.append(Paragraph("Glosario de Términos Técnicos:", self.styles['SectionTitle']))
-            for term in chatgpt_analysis['technical_terms']:
+            for term in ai_analysis['technical_terms']:
                 elements.append(Paragraph(f"📚 {term}", self.styles['NormalFinding']))
         
         return elements
