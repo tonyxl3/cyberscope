@@ -292,11 +292,14 @@ function showResults(data) {
     document.getElementById('downloadPdf').onclick = () => downloadReport('pdf');
 }
 
-function showChatGPTAnalysis(analysis) {
-    const chatgptDiv = document.getElementById('chatgptAnalysis');
+function showAIAnalysis(analysis) {
+    const aiDiv = document.getElementById('chatgptAnalysis');
     const riskLevel = document.getElementById('riskLevel');
     const executiveSummary = document.getElementById('executiveSummary');
     const recommendations = document.getElementById('recommendations');
+    
+    // Determinar el nombre del analizador
+    const analyzerName = analysis.analyzer || 'Analizador IA';
     
     // Mostrar nivel de riesgo
     if (analysis.risk_level) {
@@ -308,7 +311,10 @@ function showChatGPTAnalysis(analysis) {
     
     // Mostrar resumen ejecutivo
     if (analysis.executive_summary) {
-        executiveSummary.innerHTML = `<strong>Resumen:</strong> ${escapeHtml(analysis.executive_summary)}`;
+        let summary = analysis.executive_summary;
+        // Limpiar caracteres problemáticos
+        summary = summary.replace(/nn/g, '<br><br>').replace(/n/g, '<br>');
+        executiveSummary.innerHTML = `<strong>Resumen (${analyzerName}):</strong> ${summary}`;
     }
     
     // Mostrar recomendaciones principales
@@ -319,7 +325,7 @@ function showChatGPTAnalysis(analysis) {
         recommendations.innerHTML = `<strong>Recomendaciones principales:</strong><ul>${recList}</ul>`;
     }
     
-    chatgptDiv.style.display = 'block';
+   aiDiv.style.display = 'block';
 }
 
 function getRiskColor(riskLevel) {
