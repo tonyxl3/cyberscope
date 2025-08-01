@@ -375,13 +375,6 @@ class CyberScopePDFGenerator:
         # Texto simplificado
         if ai_analysis.get('simplified_text'):
             elements.append(Paragraph("Explicación Simplificada:", self.styles['SectionTitle']))
-            
-            # Limpiar texto antes de agregarlo al PDF
-            simplified_text = ai_analysis['simplified_text']
-            simplified_text = simplified_text.replace('nn', '<br/><br/>')
-            simplified_text = simplified_text.replace('n', '<br/>')
-            simplified_text = re.sub(r'<br/>{3,}', '<br/><br/>', simplified_text)
-            
             elements.append(Paragraph(simplified_text, self.styles['ChatGPTAnalysis']))
             elements.append(Spacer(1, 0.2*inch))
         
