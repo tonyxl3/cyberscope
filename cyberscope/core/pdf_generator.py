@@ -180,7 +180,7 @@ class CyberScopePDFGenerator:
         
         # Análisis ChatGPT (si está disponible)
         if analysis_data.get('chatgpt_analysis'):
-            story.extend(self.create_chatgpt_analysis_section(analysis_data['chatgpt_analysis']))
+            story.extend(self.create_ai_analysis_section(analysis_data['chatgpt_analysis']))
             story.append(PageBreak())
         
         # Hallazgos detallados

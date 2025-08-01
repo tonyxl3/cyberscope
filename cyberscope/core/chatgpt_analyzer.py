@@ -62,9 +62,16 @@ class GroqAnalyzer:
             if response and isinstance(response, str) and len(response.strip()) > 100:
                 processed_analysis = self._process_groq_response(response)
                 
-                if processed_analysis and len(processed_analysis.get("executive_summary", "")) > 20:
+                if processed_analysis and processed_analysis.get("executive_summary"):
                     FINDINGS.append(f"[GROQ_ANALYSIS] Análisis completado - {len(processed_analysis.get('key_findings', []))} puntos clave identificados")
                     return processed_analysis
+                else:
+                    logger.warning(f"⚠️ Respuesta de Groq procesada pero incompleta")
+                    FINDINGS.append("[GROQ_WARNING] Respuesta de Groq incompleta, usando fallback")
+            else:
+                logger.warning(f"⚠️ Respuesta de Groq muy corta o vacía: {len(response.strip()) if response else 0} caracteres")
+                if response:
+                    logger.debug(f"Respuesta Groq: {response[:200]}...")
                     
             FINDINGS.append("[GROQ_ERROR] No se pudo obtener análisis de Groq")
             return None
@@ -89,7 +96,11 @@ INFORMACIÓN DEL OBJETIVO:
 """
         
         # Hallazgos técnicos (limitar para no exceder tokens)
-        findings_text = "\n".join([f"- {finding}" for finding in findings_list[:40]])
+        findings_text = "\n".join([f"- {finding}" for finding in findings_list[:30]])  # Reducir para evitar límites
+        
+        # Si hay muchos hallazgos, agregar resumen
+        if len(findings_list) > 30:
+            findings_text += f"\n... y {len(findings_list) - 30} hallazgos adicionales"
         
         prompt = f"""
 Eres un experto en ciberseguridad y análisis forense digital. Analiza los siguientes hallazgos técnicos y proporciona una explicación clara y comprensible para usuarios no técnicos.
@@ -150,13 +161,13 @@ IMPORTANTE:
             # Usar la librería oficial de Groq
             client = Groq(api_key=self.api_key)
             
-            logger.info("Enviando análisis a Groq AI...")
+            logger.info(f"🤖 Enviando análisis a Groq AI... ({len(prompt)} caracteres)")
             
             chat_completion = client.chat.completions.create(
                 messages=[
                     {
                         "role": "system",
-                        "content": "Eres un experto en ciberseguridad que explica hallazgos técnicos de forma clara y comprensible para usuarios no técnicos. Tus análisis son precisos, prácticos y están orientados a la acción."
+                        "content": "Eres un experto en ciberseguridad que explica hallazgos técnicos de forma clara y comprensible. Proporciona análisis estructurados, precisos y orientados a la acción. Usa formato claro con saltos de línea apropiados."
                     },
                     {
                         "role": "user",
@@ -164,13 +175,13 @@ IMPORTANTE:
                     }
                 ],
                 model=self.model,
-                max_tokens=2500,
-                temperature=0.3,
-                top_p=0.9
+                max_tokens=3000,  # Aumentar límite
+                temperature=0.2,  # Más determinístico
+                top_p=0.8
             )
             
             content = chat_completion.choices[0].message.content
-            logger.info("✅ Análisis Groq completado exitosamente")
+            logger.info(f"✅ Análisis Groq completado: {len(content)} caracteres")
             return self._sanitize_response_text(content)
                 
         except Exception as e:
@@ -182,9 +193,38 @@ IMPORTANTE:
                 logger.warning("⚠️ Límite de rate de Groq alcanzado, reintentando...")
                 time.sleep(10)
                 try:
-                    return self._send_to_groq_api(prompt)  # Retry una vez
+                    logger.info("🔄 Reintentando llamada a Groq...")
+                    client = Groq(api_key=self.api_key)
+                    chat_completion = client.chat.completions.create(
+                        messages=[
+                            {
+                                "role": "system",
+                                "content": "Eres un experto en ciberseguridad. Proporciona análisis claros y estructurados."
+                            },
+                            {
+                                "role": "user",
+                                "content": prompt[:4000]  # Reducir tamaño en retry
+                            }
+                        ],
+                        model=self.model,
+                        max_tokens=2000,
+                        temperature=0.3
+                    )
+                    content = chat_completion.choices[0].message.content
+                    logger.info("✅ Retry exitoso")
+                    return self._sanitize_response_text(content)
                 except:
                     logger.error("❌ Retry falló también")
+                    return None
+            elif "context_length" in error_msg or "too long" in error_msg:
+                logger.warning("⚠️ Prompt muy largo, reduciendo tamaño...")
+                try:
+                    # Retry con prompt más corto
+                    short_prompt = prompt[:3000] + "\n\nPor favor, proporciona un análisis conciso de los hallazgos más importantes."
+                    return self._send_to_groq_api(short_prompt)
+                except:
+                    logger.error("❌ Retry con prompt corto falló")
+                    return None
             else:
                 logger.error(f"❌ Error enviando a Groq API: {e}")
             return None
@@ -195,11 +235,17 @@ IMPORTANTE:
         """
         if not isinstance(text, str):
             return text
-        # Reemplazos típicos
-        text = text.replace("nn", "\n• ")
-        text = text.replace("n", "\n")
-        text = re.sub(r'\s{3,}', '  ', text)
-        text = re.sub(r'•\s*•', '•', text)
+        
+        # Limpiar caracteres problemáticos
+        text = text.replace("\\n", "\n")  # Convertir \n literales
+        text = text.replace("nn", "\n\n")  # Doble n a doble salto
+        text = re.sub(r'(?<!\n)n(?=\s)', '\n', text)  # n sueltas a salto de línea
+        text = re.sub(r'\s{3,}', ' ', text)  # Múltiples espacios a uno
+        text = re.sub(r'•\s*•', '•', text)  # Bullets duplicados
+        text = re.sub(r'\n{3,}', '\n\n', text)  # Múltiples saltos a doble
+        
+        # Limpiar inicio y final
+        text = text.strip()
 
         return text.strip()
     
