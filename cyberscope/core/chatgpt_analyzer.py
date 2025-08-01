@@ -228,26 +228,6 @@ IMPORTANTE:
             else:
                 logger.error(f"❌ Error enviando a Groq API: {e}")
             return None
-
-    def _sanitize_response_text(self, text):
-        """
-        Limpia artefactos comunes como 'n', 'nn', espacios incorrectos, etc.
-        """
-        if not isinstance(text, str):
-            return text
-        
-        # Limpiar caracteres problemáticos
-        text = text.replace("\\n", "\n")  # Convertir \n literales
-        text = text.replace("nn", "\n\n")  # Doble n a doble salto
-        text = re.sub(r'(?<!\n)n(?=\s)', '\n', text)  # n sueltas a salto de línea
-        text = re.sub(r'\s{3,}', ' ', text)  # Múltiples espacios a uno
-        text = re.sub(r'•\s*•', '•', text)  # Bullets duplicados
-        text = re.sub(r'\n{3,}', '\n\n', text)  # Múltiples saltos a doble
-        
-        # Limpiar inicio y final
-        text = text.strip()
-
-        return text.strip()
     
     def _process_groq_response(self, response_text):
         """
