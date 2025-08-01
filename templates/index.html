@@ -140,7 +140,7 @@
                                 
                                 <!-- Análisis ChatGPT -->
                                 <div id="chatgptAnalysis" style="display: none;" class="mt-3">
-                                    <h6>🤖 Análisis Inteligente:</h6>
+                                    <h6>🤖 Análisis Inteligente (IA):</h6>
                                     <div class="card">
                                         <div class="card-body">
                                             <div id="riskLevel" class="mb-2"></div>
@@ -292,14 +292,11 @@ function showResults(data) {
     document.getElementById('downloadPdf').onclick = () => downloadReport('pdf');
 }
 
-function showAIAnalysis(analysis) {
-    const aiDiv = document.getElementById('chatgptAnalysis');
+function showChatGPTAnalysis(analysis) {
+    const chatgptDiv = document.getElementById('chatgptAnalysis');
     const riskLevel = document.getElementById('riskLevel');
     const executiveSummary = document.getElementById('executiveSummary');
     const recommendations = document.getElementById('recommendations');
-    
-    // Determinar el nombre del analizador
-    const analyzerName = analysis.analyzer || 'Analizador IA';
     
     // Mostrar nivel de riesgo
     if (analysis.risk_level) {
@@ -311,10 +308,7 @@ function showAIAnalysis(analysis) {
     
     // Mostrar resumen ejecutivo
     if (analysis.executive_summary) {
-        let summary = analysis.executive_summary;
-        // Limpiar caracteres problemáticos
-        summary = summary.replace(/nn/g, '<br><br>').replace(/n/g, '<br>');
-        executiveSummary.innerHTML = `<strong>Resumen (${analyzerName}):</strong> ${summary}`;
+        executiveSummary.innerHTML = `<strong>Resumen:</strong> ${escapeHtml(analysis.executive_summary)}`;
     }
     
     // Mostrar recomendaciones principales
@@ -325,7 +319,7 @@ function showAIAnalysis(analysis) {
         recommendations.innerHTML = `<strong>Recomendaciones principales:</strong><ul>${recList}</ul>`;
     }
     
-   aiDiv.style.display = 'block';
+    chatgptDiv.style.display = 'block';
 }
 
 function getRiskColor(riskLevel) {
